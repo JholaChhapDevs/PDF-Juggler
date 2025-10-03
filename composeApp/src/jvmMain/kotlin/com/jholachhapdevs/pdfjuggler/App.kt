@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.SlideTransition
+import com.jholachhapdevs.pdfjuggler.core.ui.PdfJugglerTheme
 import com.jholachhapdevs.pdfjuggler.home.ui.HomeScreen
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -25,7 +26,7 @@ import pdf_juggler.composeapp.generated.resources.compose_multiplatform
 @Composable
 @Preview
 fun App() {
-    MaterialTheme {
+    PdfJugglerTheme {
         Navigator(HomeScreen) {
             SlideTransition(it)
         }

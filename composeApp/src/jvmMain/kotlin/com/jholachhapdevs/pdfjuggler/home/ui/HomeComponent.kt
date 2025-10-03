@@ -1,9 +1,9 @@
 package com.jholachhapdevs.pdfjuggler.home.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.jholachhapdevs.pdfjuggler.core.ui.components.JButton
+import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import kotlinx.coroutines.launch
 
 @Composable
@@ -25,6 +27,7 @@ fun HomeComponent(screenModel: HomeScreenModel) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
     ) {
         when {
@@ -53,24 +56,28 @@ fun HomeComponent(screenModel: HomeScreenModel) {
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text(
+                    JText(
                         text = "Update Available",
-                        style = MaterialTheme.typography.headlineSmall
+                        style = MaterialTheme.typography.headlineLarge
                     )
-                    Text(
+                    JText(
                         text = "Latest version: ${info.latestVersionName}",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.labelLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Button(
+                    JButton(
                         onClick = {
                             scope.launch {
                                 uriHandler.openUri(info.downloadMCA3)
                             }
                         }
                     ) {
-                        Text("Download")
+                        JText(
+                            text = "Download",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
             }
