@@ -24,6 +24,7 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
 
             implementation(libs.bundles.basics)
+            implementation("org.apache.pdfbox:pdfbox:2.0.30")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

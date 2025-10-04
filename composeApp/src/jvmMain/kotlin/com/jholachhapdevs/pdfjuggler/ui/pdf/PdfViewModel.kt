@@ -43,26 +43,29 @@ class PdfViewModel {
         selectedTabIndex = (selectedTabIndex.coerceAtMost(tabs.lastIndex)).coerceAtLeast(0)
     }
 
-    fun openPdfInCurrentTab(filePath: String, totalPages: Int) {
+    fun openPdfInCurrentTab(filePath: String) {
+        val totalPages = PdfUtils.getTotalPages(filePath)
+        val thumbnails = PdfUtils.renderThumbnails(filePath, totalPages)
+        val firstPage = PdfUtils.renderPage(filePath, 0)
+
         val current = currentTab ?: return
 
-        val updatedTab = current.copy(
+        val updated = current.copy(
             title = filePath.substringAfterLast("/"),
             content = TabContent.PdfViewer(
                 filePath = filePath,
                 totalPages = totalPages,
                 currentPage = 0,
-                thumbnails = List(totalPages) { null },
-                pageBitmaps = emptyMap()
+                thumbnails = thumbnails,
+                pageBitmaps = mapOf(0 to firstPage)
             )
         )
 
-        // Replace the tab at selected index
         tabs = tabs.mapIndexed { i, tab ->
-            if (i == selectedTabIndex) updatedTab else tab
+            if (i == selectedTabIndex) updated else tab
         }
 
-        println("Updated tab content: ${updatedTab.content}")
+        println("Opened PDF: ${updated.title} ($totalPages pages)")
     }
 
     fun selectPage(pageIndex: Int) {
@@ -78,24 +81,44 @@ class PdfViewModel {
     }
 
     fun nextPage() {
-        val current = currentTab ?: return
-        if (current.content is TabContent.PdfViewer) {
-            val pdf = current.content
+        val tab = currentTab ?: return
+        if (tab.content is TabContent.PdfViewer) {
+            val pdf = tab.content
             if (pdf.currentPage < pdf.totalPages - 1) {
-                val updated = current.copy(content = pdf.copy(currentPage = pdf.currentPage + 1))
+                val nextPage = pdf.currentPage + 1
+                val existingBitmap = pdf.pageBitmaps[nextPage]
+                    ?: PdfUtils.renderPage(pdf.filePath, nextPage)
+
+                val updated = tab.copy(
+                    content = pdf.copy(
+                        currentPage = nextPage,
+                        pageBitmaps = pdf.pageBitmaps + (nextPage to existingBitmap)
+                    )
+                )
                 tabs = tabs.mapIndexed { i, t -> if (i == selectedTabIndex) updated else t }
             }
         }
     }
 
+
     fun prevPage() {
-        val current = currentTab ?: return
-        if (current.content is TabContent.PdfViewer) {
-            val pdf = current.content
+        val tab = currentTab ?: return
+        if (tab.content is TabContent.PdfViewer) {
+            val pdf = tab.content
             if (pdf.currentPage > 0) {
-                val updated = current.copy(content = pdf.copy(currentPage = pdf.currentPage - 1))
+                val prevPage = pdf.currentPage - 1
+                val existingBitmap = pdf.pageBitmaps[prevPage]
+                    ?: PdfUtils.renderPage(pdf.filePath, prevPage)
+
+                val updated = tab.copy(
+                    content = pdf.copy(
+                        currentPage = prevPage,
+                        pageBitmaps = pdf.pageBitmaps + (prevPage to existingBitmap)
+                    )
+                )
                 tabs = tabs.mapIndexed { i, t -> if (i == selectedTabIndex) updated else t }
             }
         }
     }
+
 }

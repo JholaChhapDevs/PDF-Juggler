@@ -30,7 +30,7 @@ fun HomeScreen(viewModel: PdfViewModel) {
         Button(onClick = {
             val filePath = pickPdfFile()
             if (filePath != null) {
-                viewModel.openPdfInCurrentTab(filePath, totalPages = 5)
+                viewModel.openPdfInCurrentTab(filePath)
             }
         }) {
             Text("Choose a PDF to Open")
