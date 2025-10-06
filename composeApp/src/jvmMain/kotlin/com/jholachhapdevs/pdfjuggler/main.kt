@@ -1,8 +1,9 @@
 package com.jholachhapdevs.pdfjuggler
 
-import App
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import com.jholachhapdevs.pdfjuggler.core.util.LocalComposeWindow
 
 fun main() = application {
 
@@ -12,6 +13,9 @@ fun main() = application {
         onCloseRequest = ::exitApplication,
         title = "PDF-Juggler",
     ) {
-        App()
+        val window = this.window
+        CompositionLocalProvider(LocalComposeWindow provides window) {
+            App()
+        }
     }
 }

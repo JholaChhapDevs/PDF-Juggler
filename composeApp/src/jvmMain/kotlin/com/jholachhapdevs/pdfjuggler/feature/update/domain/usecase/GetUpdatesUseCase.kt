@@ -1,10 +1,10 @@
-package com.jholachhapdevs.pdfjuggler.home.domain.usecase
+package com.jholachhapdevs.pdfjuggler.feature.update.domain.usecase
 
-import com.jholachhapdevs.pdfjuggler.home.data.repository.HomeRepository
+import com.jholachhapdevs.pdfjuggler.feature.update.data.repository.UpdateRepository
 
 
 // Use case to get update information from the repository
-class GetUpdatesUseCase(private val repository: HomeRepository) {
+class GetUpdatesUseCase(private val repository: UpdateRepository) {
 
     // Invoke the use case to fetch update data and convert it to domain model
 

@@ -1,24 +1,28 @@
+// Kotlin
 package com.jholachhapdevs.pdfjuggler.core.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.*
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.jholachhapdevs.pdfjuggler.core.ui.extendedColors
 
@@ -28,92 +32,69 @@ fun JButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     shape: Shape = JugglerButtonDefaults.shape,
-    border: BorderStroke? = null,
-    contentPadding: PaddingValues = JugglerButtonDefaults.contentPadding,
-    interactionSource: MutableInteractionSource? = null,
+    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
+    glowColor: Color = MaterialTheme.extendedColors.focusGlow,
     content: @Composable RowScope.() -> Unit
 ) {
-    val internalInteractionSource = interactionSource ?: remember { MutableInteractionSource() }
-    val isHovered by internalInteractionSource.collectIsHoveredAsState()
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val cs = MaterialTheme.colorScheme
+    val density = LocalDensity.current
 
-    val buttonGlowColor = MaterialTheme.colorScheme.primary
+    val containerColor by animateColorAsState(
+        targetValue = if (isHovered && enabled) cs.primary else Color.Transparent,
+        label = "containerColorAnim"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (isHovered && enabled) cs.background else cs.primary,
+        label = "contentColorAnim"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (isHovered && enabled) Color.Transparent else cs.primary,
+        label = "borderColorAnim"
+    )
 
-    // Animations
-    val floatAnimSpec = tween<Float>(durationMillis = 250)
-    val colorAnimSpec = tween<Color>(durationMillis = 250)
-
+    val glowRadiusDp by animateDpAsState(
+        targetValue = if (isHovered && enabled) 16.dp else 0.dp,
+        label = "glowRadiusAnim"
+    )
     val glowAlpha by animateFloatAsState(
-        targetValue = if (isHovered && enabled) 0.7f else 0f,
-        animationSpec = floatAnimSpec,
+        targetValue = if (isHovered && enabled) 1f else 0f,
         label = "glowAlphaAnim"
     )
 
-    val scale by animateFloatAsState(
-        targetValue = if (isHovered && enabled) 1.05f else 1f,
-        animationSpec = floatAnimSpec,
-        label = "scaleAnim"
-    )
+    val glowModifier = if (glowAlpha > 0f && glowRadiusDp > 0.dp) {
+        val radiusPx = with(density) { glowRadiusDp.toPx() }
+        Modifier.dropShadow(shape = shape) {
+            this.radius = radiusPx
+            this.spread = 0f
+            this.color = glowColor.copy(alpha = 0.7f * glowAlpha)
+        }
+    } else {
+        Modifier
+    }
 
-    val backgroundColor by animateColorAsState(
-        targetValue = when {
-            !enabled -> MaterialTheme.extendedColors.disabledBackground
-            isHovered -> MaterialTheme.colorScheme.primary
-            else -> MaterialTheme.colorScheme.surface
-        },
-        animationSpec = colorAnimSpec, label = "backgroundColorAnim"
-    )
-
-    val contentColor by animateColorAsState(
-        targetValue = when {
-            !enabled -> MaterialTheme.extendedColors.disabledContent
-            isHovered -> MaterialTheme.colorScheme.onPrimary
-            else -> MaterialTheme.colorScheme.onSurface
-        },
-        animationSpec = colorAnimSpec, label = "contentColorAnim"
-    )
-
-    val borderColor by animateColorAsState(
-        targetValue = if (!enabled) MaterialTheme.extendedColors.disabledContent.copy(alpha = 0.5f)
-        else MaterialTheme.colorScheme.primary,
-        animationSpec = colorAnimSpec,
-        label = "borderAnim"
-    )
-
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        shape = shape,
-        color = backgroundColor,
-        contentColor = contentColor,
-        border = border ?: BorderStroke(1.dp, borderColor),
-        modifier = modifier
-            .hoverable(internalInteractionSource)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .drawBehind {
-                if (glowAlpha > 0f) {
-                    val glowColor = buttonGlowColor.copy(alpha = glowAlpha)
-                    drawRoundRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(glowColor, Color.Transparent),
-                            center = center,
-                            radius = size.minDimension * 0.8f
-                        ),
-                        cornerRadius = CornerRadius(20f, 20f)
-                    )
-                }
-            }
-    ) {
-        Row(
-            modifier = Modifier.padding(contentPadding),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
+    Box(modifier.then(glowModifier)) {
+        Button(
+            onClick = onClick,
+            enabled = enabled,
+            interactionSource = interactionSource,
+            shape = shape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = containerColor,
+                contentColor = contentColor,
+                disabledContainerColor = cs.surfaceVariant.copy(alpha = 0.12f),
+                disabledContentColor = cs.onSurface.copy(alpha = 0.38f)
+            ),
+            border = BorderStroke(1.dp, borderColor),
+            contentPadding = contentPadding,
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
             content = content
         )
     }
 }
+
+
 
 object JugglerButtonDefaults {
     val shape: Shape @Composable get() = RoundedCornerShape(8.dp)
@@ -121,4 +102,10 @@ object JugglerButtonDefaults {
         horizontal = 24.dp,
         vertical = 12.dp
     )
+
+    val colors: ButtonColors
+        @Composable get() = ButtonDefaults.outlinedButtonColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.primary
+        )
 }

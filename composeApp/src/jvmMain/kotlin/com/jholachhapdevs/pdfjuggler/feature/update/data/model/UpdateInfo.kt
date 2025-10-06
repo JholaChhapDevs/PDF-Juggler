@@ -1,6 +1,6 @@
-package com.jholachhapdevs.pdfjuggler.home.data.model
+package com.jholachhapdevs.pdfjuggler.feature.update.data.model
 
-import com.jholachhapdevs.pdfjuggler.home.domain.model.UpdateInfo
+import com.jholachhapdevs.pdfjuggler.feature.update.domain.model.UpdateInfo
 import kotlinx.serialization.Serializable
 
 @Serializable   // This annotation makes the class serializable by kotlinx.serialization, allowing it to be converted to and from formats like JSON.

@@ -1,4 +1,4 @@
-package com.jholachhapdevs.pdfjuggler.home.ui
+package com.jholachhapdevs.pdfjuggler.feature.update.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -19,7 +19,7 @@ import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import kotlinx.coroutines.launch
 
 @Composable
-fun HomeComponent(screenModel: HomeScreenModel) {
+fun UpdateComponent(screenModel: UpdateScreenModel) {
     val state = screenModel.uiState
     val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
@@ -73,9 +73,8 @@ fun HomeComponent(screenModel: HomeScreenModel) {
                             }
                         }
                     ) {
-                        JText(
+                        Text(
                             text = "Download",
-                            color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }

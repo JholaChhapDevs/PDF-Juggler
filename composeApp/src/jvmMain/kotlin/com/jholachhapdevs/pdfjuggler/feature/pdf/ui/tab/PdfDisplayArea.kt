@@ -1,0 +1,52 @@
+package com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfLeft
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfMid
+
+@Composable
+fun PdfDisplayArea(
+    model: TabScreenModel
+) {
+    val listState = rememberLazyListState()
+
+    // When this tab becomes active (composed), ensure the selected page is scrolled to top.
+    LaunchedEffect(model.pdfFile.path) {
+        if (model.thumbnails.isNotEmpty()) {
+            val idx = model.selectedPageIndex.coerceIn(0, model.thumbnails.lastIndex)
+            listState.scrollToItem(idx, 0)
+        }
+    }
+
+    if (model.isLoading) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        }
+    } else {
+        Row(Modifier.fillMaxSize()) {
+            PdfLeft(
+                modifier = Modifier.weight(0.15f).fillMaxSize(),
+                thumbnails = model.thumbnails,
+                selectedIndex = model.selectedPageIndex,
+                onThumbnailClick = { model.selectPage(it) },
+                listState = listState
+            )
+            PdfMid(
+                modifier = Modifier.weight(0.85f).fillMaxSize(),
+                pageImage = model.currentPageImage
+            )
+        }
+    }
+}

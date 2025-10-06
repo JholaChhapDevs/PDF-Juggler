@@ -1,6 +1,6 @@
-package com.jholachhapdevs.pdfjuggler.home.domain.model
+package com.jholachhapdevs.pdfjuggler.feature.update.domain.model
 
-import com.jholachhapdevs.pdfjuggler.home.data.model.UpdateInfoDto
+import com.jholachhapdevs.pdfjuggler.feature.update.data.model.UpdateInfoDto
 import kotlinx.serialization.Serializable
 
 @Serializable
