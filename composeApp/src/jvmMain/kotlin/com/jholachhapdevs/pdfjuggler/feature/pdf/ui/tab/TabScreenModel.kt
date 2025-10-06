@@ -7,11 +7,19 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TableOfContentData
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.PdfFile
+import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TextPositionData
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.PositionAwareTextStripper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.apache.pdfbox.pdmodel.PDDocument
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageXYZDestination
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem
 import org.apache.pdfbox.rendering.ImageType
 import org.apache.pdfbox.rendering.PDFRenderer
 import java.awt.image.BufferedImage
@@ -38,6 +46,14 @@ class TabScreenModel(
     var isLoading by mutableStateOf(true)
         private set
 
+    var allTextDataWithCoordinates by mutableStateOf<Map<Int, List<TextPositionData>>>(emptyMap())
+        private set
+
+    var allTextData by mutableStateOf<Map<Int, String>>(emptyMap())
+        private set
+    var tableOfContent by mutableStateOf<List<TableOfContentData>>(emptyList())
+        private set
+
     init {
         loadPdf()
     }
@@ -48,7 +64,11 @@ class TabScreenModel(
             try {
                 totalPages = getTotalPages(pdfFile.path)
                 thumbnails = renderThumbnails(pdfFile.path, totalPages)
-                currentPageImage = renderPage(pdfFile.path, 0, 150f)
+                currentPageImage = renderPage(pdfFile.path,
+                    0, 150f)
+                allTextDataWithCoordinates = extractAllTextData(pdfFile.path)
+                allTextData = getTextOnlyData()
+                tableOfContent = getTableOfContents(pdfFile.path)
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -119,5 +139,78 @@ class TabScreenModel(
         val byteArray = outputStream.toByteArray()
         val skiaImage = org.jetbrains.skia.Image.makeFromEncoded(byteArray)
         return skiaImage.toComposeImageBitmap()
+    }
+
+
+
+   private fun extractAllTextData(filePath: String): Map<Int, List<TextPositionData>> {
+        PDDocument.load(File(filePath)).use { document ->
+            val stripper = PositionAwareTextStripper()
+
+            stripper.getText(document)
+
+            return stripper.allPageTextData.mapValues { it.value.toList() }
+        }
+   }
+
+   //function to get to convert allTextData to a map of page number to textOnly
+    private fun getTextOnlyData(): Map<Int, String> {
+        return allTextDataWithCoordinates.mapValues { entry ->
+            entry.value.joinToString(" ") { it.text }
+        }
+    }
+
+    private suspend fun getTableOfContents(filePath: String): List<TableOfContentData> = withContext(Dispatchers.IO) {
+        PDDocument.load(File(filePath)).use { document ->
+            val outline: PDDocumentOutline? = document.documentCatalog.documentOutline
+
+            if (outline == null) return@withContext emptyList()
+
+            // Process the children of the root outline. Note the use of children()
+            return@withContext outline.children().mapNotNull {
+                if (it is PDOutlineItem) processOutlineItem(it, document) else null
+            }
+        }
+    }
+
+     //Helper function to recursively process the PDOutline tree.
+
+    private fun processOutlineItem(item: PDOutlineItem, document: PDDocument): TableOfContentData? {
+        val title = item.title
+        var pageIndex = -1
+        var destinationY = 0f
+
+        val destination = item.action as? PDActionGoTo
+
+        if (destination != null) {
+            val dest = destination.destination as? PDPageDestination
+
+            if (dest != null) {
+                for (i in 0 until document.numberOfPages) {
+                    if (document.getPage(i) == dest.page) {
+                        pageIndex = i
+                        destinationY = if (dest is PDPageXYZDestination) {
+                            dest.top?.toFloat() ?: 0f
+                        } else {
+                            0f
+                        }
+                        break
+                    }
+                }
+            }
+        }
+
+        if (pageIndex == -1) return null
+
+        val children = item.children().mapNotNull {
+            if (it is PDOutlineItem) processOutlineItem(it, document) else null
+        }
+
+        return TableOfContentData(
+            title = title,
+            pageIndex = pageIndex,
+            destinationY = destinationY,
+            children = children
+        )
     }
 }

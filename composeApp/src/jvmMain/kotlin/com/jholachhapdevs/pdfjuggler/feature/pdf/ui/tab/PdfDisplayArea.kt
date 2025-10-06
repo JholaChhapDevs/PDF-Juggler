@@ -26,7 +26,9 @@ fun PdfDisplayArea(
             listState.scrollToItem(idx, 0)
         }
     }
-
+    if(!model.isLoading){
+        println(model.tableOfContent)
+    }
     if (model.isLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
