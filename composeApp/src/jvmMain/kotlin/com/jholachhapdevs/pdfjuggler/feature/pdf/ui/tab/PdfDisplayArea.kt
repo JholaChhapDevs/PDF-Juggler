@@ -125,21 +125,25 @@ fun PdfDisplayArea(
             
             // Main content
             Row(Modifier.fillMaxSize()) {
-                PdfLeft(
-                    modifier = Modifier.weight(0.15f).fillMaxSize(),
-                    thumbnails = model.thumbnails,
-                    selectedIndex = model.selectedPageIndex,
-                    onThumbnailClick = { model.selectPage(it) },
-                    onMovePageUp = { model.movePageUp(it) },
-                    onMovePageDown = { model.movePageDown(it) },
-                    hasPageChanges = model.hasPageChanges,
-                    listState = listState
-                )
+                // Hide left pane when in fullscreen mode
+                if (!model.isFullscreen) {
+                    PdfLeft(
+                        modifier = Modifier.weight(0.15f).fillMaxSize(),
+                        thumbnails = model.thumbnails,
+                        selectedIndex = model.selectedPageIndex,
+                        onThumbnailClick = { model.selectPage(it) },
+                        onMovePageUp = { model.movePageUp(it) },
+                        onMovePageDown = { model.movePageDown(it) },
+                        hasPageChanges = model.hasPageChanges,
+                        listState = listState
+                    )
+                }
                PdfMid(
-                    modifier = Modifier.weight(0.85f).fillMaxSize(),
+                    modifier = Modifier.weight(if (model.isFullscreen) 1f else 0.85f).fillMaxSize(),
                     pageImage = model.currentPageImage,
                     textData = model.allTextDataWithCoordinates[model.selectedPageIndex] ?: emptyList(),
                     rotation = model.currentRotation,
+                    isFullscreen = model.isFullscreen,
                     onTextSelected = { selectedText ->
                         // Handle selected text
                         println("Selected text: $selectedText")
@@ -155,6 +159,9 @@ fun PdfDisplayArea(
                     },
                     onRotateCounterClockwise = {
                         model.rotateCounterClockwise()
+                    },
+                    onToggleFullscreen = {
+                        model.toggleFullscreen()
                     }
                 )
             }

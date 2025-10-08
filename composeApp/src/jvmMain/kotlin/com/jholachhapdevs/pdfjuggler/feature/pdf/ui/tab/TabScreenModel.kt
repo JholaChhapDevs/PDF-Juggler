@@ -33,6 +33,7 @@ import javax.imageio.ImageIO
 
 class TabScreenModel(
     val pdfFile: PdfFile,
+    private val window: java.awt.Window? = null
 ) : ScreenModel {
     
     // High-quality PDF renderer
@@ -72,6 +73,10 @@ class TabScreenModel(
     var currentRotation by mutableStateOf(0f)
         private set
     
+    // Fullscreen state
+    var isFullscreen by mutableStateOf(false)
+        private set
+
     // Page ordering - maps display order to original page indices
     var pageOrder by mutableStateOf<List<Int>>(emptyList())
         private set
@@ -159,6 +164,36 @@ class TabScreenModel(
         }
     }
     
+    /**
+     * Toggle fullscreen mode
+     */
+    fun toggleFullscreen() {
+        isFullscreen = !isFullscreen
+        // Toggle actual window fullscreen state
+        window?.let { win ->
+            if (win is java.awt.Frame) {
+                win.extendedState = if (isFullscreen) {
+                    java.awt.Frame.MAXIMIZED_BOTH
+                } else {
+                    java.awt.Frame.NORMAL
+                }
+            }
+            // Use GraphicsDevice for true fullscreen
+            val graphicsDevice = java.awt.GraphicsEnvironment
+                .getLocalGraphicsEnvironment()
+                .defaultScreenDevice
+            if (isFullscreen) {
+                if (graphicsDevice.isFullScreenSupported) {
+                    graphicsDevice.fullScreenWindow = win
+                }
+            } else {
+                if (graphicsDevice.fullScreenWindow == win) {
+                    graphicsDevice.fullScreenWindow = null
+                }
+            }
+        }
+    }
+
     /**
      * Rotate the current page 90 degrees clockwise
      */

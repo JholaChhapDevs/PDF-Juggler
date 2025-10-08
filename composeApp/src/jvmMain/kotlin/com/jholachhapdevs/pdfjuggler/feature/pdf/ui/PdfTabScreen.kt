@@ -20,6 +20,7 @@ data class PdfTabScreen(
         val model = rememberScreenModel {
             PdfTabScreenModel(
                 getPdfUseCase = GetPdfUseCase(PdfFileRepository(window)),
+                window = window,
                 initial = pdfFile
             )
         }

@@ -5,10 +5,10 @@ import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.RotateLeft
-import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.automirrored.filled.RotateLeft
+import androidx.compose.material.icons.automirrored.filled.RotateRight
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.*
@@ -27,7 +27,6 @@ import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
@@ -44,15 +43,16 @@ fun PdfMid(
     pageImage: ImageBitmap? = null,
     textData: List<TextPositionData> = emptyList(),
     rotation: Float = 0f,
+    isFullscreen: Boolean = false,
     onTextSelected: (String) -> Unit = {},
     onZoomChanged: (Float) -> Unit = {},
     onViewportChanged: (IntSize) -> Unit = {},
     onRotateClockwise: () -> Unit = {},
-    onRotateCounterClockwise: () -> Unit = {}
+    onRotateCounterClockwise: () -> Unit = {},
+    onToggleFullscreen: () -> Unit = {}
 ) {
     val cs = MaterialTheme.colorScheme
     val clipboardManager = LocalClipboardManager.current
-    val density = LocalDensity.current
 
     // Zoom and pan state
     var zoomFactor by remember { mutableStateOf(1f) }
@@ -391,13 +391,25 @@ fun PdfMid(
                 IconButton(
                     onClick = onRotateCounterClockwise
                 ) {
-                    Icon(Icons.Default.RotateLeft, "Rotate Left")
+                    Icon(Icons.AutoMirrored.Filled.RotateLeft, "Rotate Left")
                 }
                 
                 IconButton(
                     onClick = onRotateClockwise
                 ) {
-                    Icon(Icons.Default.RotateRight, "Rotate Right")
+                    Icon(Icons.AutoMirrored.Filled.RotateRight, "Rotate Right")
+                }
+
+                // Fullscreen toggle
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = onToggleFullscreen
+                ) {
+                    Icon(
+                        imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                        contentDescription = if (isFullscreen) "Exit Fullscreen" else "Enter Fullscreen"
+                    )
                 }
             }
         }

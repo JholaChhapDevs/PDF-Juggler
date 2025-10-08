@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 
 class PdfTabScreenModel(
     private val getPdfUseCase: GetPdfUseCase,
+    private val window: java.awt.Window,
     initial: PdfFile? = null
 ) : ScreenModel {
 
@@ -73,6 +74,6 @@ class PdfTabScreenModel(
     }
 
     private fun getOrCreateModel(file: PdfFile): TabScreenModel {
-        return contentCache.getOrPut(file.path) { TabScreenModel(file) }
+        return contentCache.getOrPut(file.path) { TabScreenModel(file, window) }
     }
 }
