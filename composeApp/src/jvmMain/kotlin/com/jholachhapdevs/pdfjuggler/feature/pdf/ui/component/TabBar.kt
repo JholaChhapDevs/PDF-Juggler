@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.filled.ViewColumn
-import androidx.compose.material.icons.filled.ViewDay
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +25,7 @@ fun TabBar(
     onAdd: () -> Unit,
     onSelect: (Tab) -> Unit,
     onClose: (Tab) -> Unit,
+    onPrint: () -> Unit,
     isSplitViewEnabled: Boolean = false,
     onToggleSplitView: () -> Unit = {}
 ) {
@@ -67,6 +66,13 @@ fun TabBar(
                 }
             }
 
+            IconButton(onClick = onPrint) {
+                Icon(
+                    imageVector = Icons.Outlined.Print,
+                    contentDescription = "Print",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
             IconButton(onClick = onAdd) {
                 Icon(
                     imageVector = Icons.Outlined.Add,
