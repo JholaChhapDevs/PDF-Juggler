@@ -74,7 +74,6 @@ fun PdfMid(
     
     // Clear selection when switching pages (when textData changes)
     LaunchedEffect(textData) {
-        println("DEBUG: Clearing selection state due to textData change. TextData size: ${textData.size}")
         selectionStart = null
         selectionEnd = null
         selectedText = ""
@@ -165,7 +164,6 @@ fun PdfMid(
 
     // Create bounding boxes for text using PDF points -> normalized to 0..1, then scaled to canvas
     val textBoundsNormalized = remember(textData, pageImage, pageSizePoints, rotation) {
-        println("DEBUG: Recalculating textBoundsNormalized. TextData size: ${textData.size}, PageImage: ${pageImage != null}, PageSizePoints: $pageSizePoints, Rotation: $rotation")
         val rot = ((rotation % 360f) + 360f) % 360f
         val rotInt = when {
             rot in 45f..135f -> 90
@@ -223,10 +221,6 @@ fun PdfMid(
                     rectR to t
                 }
             } ?: emptyList()
-        }
-        println("DEBUG: textBoundsNormalized calculated with ${normalized.size} text bounds")
-        if (normalized.isNotEmpty()) {
-            println("DEBUG: Sample bounds - first: ${normalized.first().first}, last: ${normalized.last().first}")
         }
         normalized
     }
@@ -478,7 +472,7 @@ fun PdfMid(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(aspectRatio)
-                                    .pointerInput(textBoundsNormalized) {
+                                    .pointerInput("text_selection") {
                                         awaitPointerEventScope {
                                             while (true) {
                                                 val event = awaitPointerEvent()
@@ -518,21 +512,13 @@ fun PdfMid(
                                                                             bottom = (maxY / height).coerceIn(0f, 1f)
                                                                         )
 
-                                                                        println("DEBUG: Selection area: $selNorm")
-                                                                        println("DEBUG: Available textBoundsNormalized: ${textBoundsNormalized.size} items")
-                                                                        if (textBoundsNormalized.isNotEmpty()) {
-                                                                            println("DEBUG: First text bound: ${textBoundsNormalized.first().first}")
-                                                                        }
-                                                                        
                                                                         val selectedPairs = textBoundsNormalized.filter { (nb, _) ->
                                                                             nb.overlaps(selNorm)
                                                                         }.sortedWith(compareBy(
                                                                             { (nb, _) -> nb.top },
                                                                             { (nb, _) -> nb.left }
                                                                         ))
-                                                                        
-                                                                        println("DEBUG: Selected ${selectedPairs.size} text elements")
-                                                                        
+
                                                                         selectedRectsNormalized = selectedPairs.map { it.first }
                                                                         selectedText = selectedPairs.joinToString("") { it.second.text }
                                                                         if (selectedText.isNotEmpty()) onTextSelected(selectedText)
