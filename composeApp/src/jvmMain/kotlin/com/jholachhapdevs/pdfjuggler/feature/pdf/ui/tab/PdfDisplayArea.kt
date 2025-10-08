@@ -45,9 +45,14 @@ fun PdfDisplayArea(
                 onThumbnailClick = { model.selectPage(it) },
                 listState = listState
             )
-            PdfMid(
+           PdfMid(
                 modifier = Modifier.weight(0.85f).fillMaxSize(),
-                pageImage = model.currentPageImage
+                pageImage = model.currentPageImage,
+                textData = model.allTextDataWithCoordinates[model.selectedPageIndex] ?: emptyList(),
+                onTextSelected = { selectedText ->
+                    // Handle selected text
+                    println("Selected text: $selectedText")
+                }
             )
         }
     }
