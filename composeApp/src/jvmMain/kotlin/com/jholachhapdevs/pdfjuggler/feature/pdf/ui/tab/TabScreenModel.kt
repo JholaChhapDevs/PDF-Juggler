@@ -9,6 +9,8 @@ import androidx.compose.ui.unit.IntSize
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import com.jholachhapdevs.pdfjuggler.core.pdf.HighQualityPdfRenderer
+import com.jholachhapdevs.pdfjuggler.core.pdf.PdfPageReorderUtil
+import com.jholachhapdevs.pdfjuggler.core.pdf.SaveResult
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TableOfContentData
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.PdfFile
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TextPositionData
@@ -35,6 +37,9 @@ class TabScreenModel(
     
     // High-quality PDF renderer
     private val pdfRenderer = HighQualityPdfRenderer()
+    
+    // PDF page reordering utility
+    private val pdfReorderUtil = PdfPageReorderUtil()
 
     var thumbnails by mutableStateOf<List<ImageBitmap>>(emptyList())
         private set
@@ -66,6 +71,21 @@ class TabScreenModel(
     // Current rotation angle (0, 90, 180, 270 degrees)
     var currentRotation by mutableStateOf(0f)
         private set
+    
+    // Page ordering - maps display order to original page indices
+    var pageOrder by mutableStateOf<List<Int>>(emptyList())
+        private set
+    
+    // Track if pages have been reordered
+    var hasPageChanges by mutableStateOf(false)
+        private set
+    
+    // Save operation state
+    var isSaving by mutableStateOf(false)
+        private set
+        
+    var saveResult by mutableStateOf<SaveResult?>(null)
+        private set
 
     init {
         loadPdf()
@@ -76,6 +96,8 @@ class TabScreenModel(
             isLoading = true
             try {
                 totalPages = getTotalPages(pdfFile.path)
+                // Initialize page order with original sequence
+                pageOrder = (0 until totalPages).toList()
                 thumbnails = renderThumbnails(pdfFile.path, totalPages)
                 currentPageImage = renderPageHighQuality(0)
                 allTextDataWithCoordinates = extractAllTextData(pdfFile.path)
@@ -90,11 +112,13 @@ class TabScreenModel(
     }
 
     fun selectPage(pageIndex: Int) {
-        if (pageIndex < 0 || pageIndex >= totalPages) return
+        if (pageIndex < 0 || pageIndex >= pageOrder.size) return
         selectedPageIndex = pageIndex
         screenModelScope.launch {
             try {
-                currentPageImage = renderPageHighQuality(pageIndex)
+                // Get the original page index for rendering
+                val originalPageIndex = getOriginalPageIndex(pageIndex)
+                currentPageImage = renderPageHighQuality(originalPageIndex)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -179,6 +203,246 @@ class TabScreenModel(
             }
         }
     }
+    
+    /**
+     * Move a page up in the order (decrease display position)
+     */
+    fun movePageUp(displayIndex: Int) {
+        if (displayIndex > 0 && displayIndex < pageOrder.size) {
+            val newOrder = pageOrder.toMutableList()
+            // Swap with previous item
+            val temp = newOrder[displayIndex]
+            newOrder[displayIndex] = newOrder[displayIndex - 1]
+            newOrder[displayIndex - 1] = temp
+            
+            pageOrder = newOrder
+            hasPageChanges = true
+            
+            // Update thumbnails to reflect new order
+            updateThumbnailOrder()
+            
+            // If the selected page was moved, update the selection
+            if (selectedPageIndex == displayIndex) {
+                selectedPageIndex = displayIndex - 1
+            } else if (selectedPageIndex == displayIndex - 1) {
+                selectedPageIndex = displayIndex
+            }
+        }
+    }
+    
+    /**
+     * Move a page down in the order (increase display position)
+     */
+    fun movePageDown(displayIndex: Int) {
+        if (displayIndex >= 0 && displayIndex < pageOrder.size - 1) {
+            val newOrder = pageOrder.toMutableList()
+            // Swap with next item
+            val temp = newOrder[displayIndex]
+            newOrder[displayIndex] = newOrder[displayIndex + 1]
+            newOrder[displayIndex + 1] = temp
+            
+            pageOrder = newOrder
+            hasPageChanges = true
+            
+            // Update thumbnails to reflect new order
+            updateThumbnailOrder()
+            
+            // If the selected page was moved, update the selection
+            if (selectedPageIndex == displayIndex) {
+                selectedPageIndex = displayIndex + 1
+            } else if (selectedPageIndex == displayIndex + 1) {
+                selectedPageIndex = displayIndex
+            }
+        }
+    }
+    
+    /**
+     * Move a page to a specific position in the order
+     */
+    fun movePageToPosition(fromIndex: Int, toIndex: Int) {
+        if (fromIndex == toIndex || fromIndex < 0 || toIndex < 0 || 
+            fromIndex >= pageOrder.size || toIndex >= pageOrder.size) {
+            return
+        }
+        
+        val newOrder = pageOrder.toMutableList()
+        val pageToMove = newOrder.removeAt(fromIndex)
+        newOrder.add(toIndex, pageToMove)
+        
+        pageOrder = newOrder
+        hasPageChanges = true
+        
+        // Update thumbnails to reflect new order
+        updateThumbnailOrder()
+        
+        // Update selected page index if necessary
+        when {
+            selectedPageIndex == fromIndex -> selectedPageIndex = toIndex
+            selectedPageIndex in (minOf(fromIndex, toIndex) + 1)..maxOf(fromIndex, toIndex) -> {
+                if (fromIndex < toIndex) selectedPageIndex-- else selectedPageIndex++
+            }
+        }
+    }
+    
+    /**
+     * Update thumbnails order to match page order
+     */
+    private fun updateThumbnailOrder() {
+        screenModelScope.launch {
+            try {
+                // Re-render thumbnails in new order
+                val reorderedThumbnails = mutableListOf<ImageBitmap>()
+                for (originalPageIndex in pageOrder) {
+                    val thumbnail = pdfRenderer.renderPage(
+                        pdfFile.path,
+                        originalPageIndex,
+                        HighQualityPdfRenderer.RenderOptions(
+                            dpi = 96f,
+                            highQuality = true
+                        )
+                    )
+                    thumbnail?.let { reorderedThumbnails.add(it) }
+                }
+                thumbnails = reorderedThumbnails
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+    
+    /**
+     * Reset page order to original sequence
+     */
+    fun resetPageOrder() {
+        pageOrder = (0 until totalPages).toList()
+        hasPageChanges = false
+        updateThumbnailOrder()
+        // Re-select current page based on original index
+        selectPage(selectedPageIndex)
+    }
+    
+    /**
+     * Get the original page index for a given display index
+     */
+    fun getOriginalPageIndex(displayIndex: Int): Int {
+        return if (displayIndex >= 0 && displayIndex < pageOrder.size) {
+            pageOrder[displayIndex]
+        } else {
+            displayIndex
+        }
+    }
+    
+    /**
+     * Get the display index for a given original page index
+     */
+    fun getDisplayIndex(originalPageIndex: Int): Int {
+        return pageOrder.indexOf(originalPageIndex)
+    }
+    
+    /**
+     * Save the PDF with current page ordering to a new file
+     */
+    fun savePdfAs(outputPath: String) {
+        if (isSaving) return
+        
+        screenModelScope.launch {
+            isSaving = true
+            saveResult = null
+            
+            try {
+                val result = pdfReorderUtil.saveReorderedPdf(
+                    inputFilePath = pdfFile.path,
+                    outputFilePath = outputPath,
+                    pageOrder = pageOrder
+                )
+                
+                saveResult = result
+                
+                // If save was successful, reset the changes state
+                if (result is SaveResult.Success) {
+                    hasPageChanges = false
+                }
+                
+            } catch (e: Exception) {
+                saveResult = SaveResult.Error("Save failed: ${e.message}")
+                e.printStackTrace()
+            } finally {
+                isSaving = false
+            }
+        }
+    }
+    
+    /**
+     * Save the PDF with current page ordering, overwriting the original file
+     */
+    fun savePdf() {
+        // Create a temporary file with reordered pages
+        val tempOutputPath = "${pdfFile.path}.tmp"
+        
+        screenModelScope.launch {
+            isSaving = true
+            saveResult = null
+            
+            try {
+                // Save to temporary file first
+                val result = pdfReorderUtil.saveReorderedPdf(
+                    inputFilePath = pdfFile.path,
+                    outputFilePath = tempOutputPath,
+                    pageOrder = pageOrder
+                )
+                
+                if (result is SaveResult.Success) {
+                    // Replace original file with the reordered version
+                    val originalFile = java.io.File(pdfFile.path)
+                    val tempFile = java.io.File(tempOutputPath)
+                    
+                    if (tempFile.exists()) {
+                        // Backup original file
+                        val backupPath = "${pdfFile.path}.backup"
+                        val backupFile = java.io.File(backupPath)
+                        if (backupFile.exists()) backupFile.delete()
+                        originalFile.renameTo(backupFile)
+                        
+                        // Move temp file to original location
+                        if (tempFile.renameTo(originalFile)) {
+                            // Delete backup on successful replacement
+                            backupFile.delete()
+                            saveResult = SaveResult.Success(pdfFile.path, pageOrder.size)
+                            hasPageChanges = false
+                        } else {
+                            // Restore backup if replacement failed
+                            backupFile.renameTo(originalFile)
+                            saveResult = SaveResult.Error("Failed to replace original file")
+                        }
+                    } else {
+                        saveResult = SaveResult.Error("Temporary file was not created")
+                    }
+                } else {
+                    saveResult = result
+                }
+                
+            } catch (e: Exception) {
+                saveResult = SaveResult.Error("Save failed: ${e.message}")
+                e.printStackTrace()
+            } finally {
+                // Clean up temp file
+                java.io.File(tempOutputPath).delete()
+                isSaving = false
+            }
+        }
+    }
+    
+    /**
+     * Clear the last save result
+     */
+    fun clearSaveResult() {
+        saveResult = null
+    }
+    
+    /**
+     * Validate an output path for saving
+     */
+    fun validateSavePath(outputPath: String) = pdfReorderUtil.validateOutputPath(outputPath)
 
     private suspend fun getTotalPages(filePath: String): Int = withContext(Dispatchers.IO) {
         PDDocument.load(File(filePath)).use { doc ->
