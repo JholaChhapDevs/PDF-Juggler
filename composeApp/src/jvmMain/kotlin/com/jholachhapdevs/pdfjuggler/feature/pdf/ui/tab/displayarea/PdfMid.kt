@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -113,7 +114,8 @@ fun PdfMid(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(16.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
                     ) {
                         Image(
                             bitmap = pageImage,
@@ -125,8 +127,9 @@ fun PdfMid(
                                     scaleY = zoomFactor
                                     translationX = panOffset.x
                                     translationY = panOffset.y
+                                    transformOrigin = TransformOrigin.Center
                                 },
-                            contentScale = ContentScale.Fit
+                            contentScale = ContentScale.Inside
                         )
 
                         Canvas(
@@ -137,6 +140,7 @@ fun PdfMid(
                                     scaleY = zoomFactor
                                     translationX = panOffset.x
                                     translationY = panOffset.y
+                                    transformOrigin = TransformOrigin.Center
                                 }
                                 .pointerHoverIcon(
                                     if (isHoveringText) PointerIcon.Text else PointerIcon.Default
@@ -154,24 +158,9 @@ fun PdfMid(
                                         val newZoom = (zoomFactor * zoomDirection).coerceIn(minZoom, maxZoom)
                                         zoomFactor = newZoom
                                         
-                                        // Zoom towards mouse position
-                                        val mousePos = change.position
-                                        val actualZoomChange = newZoom / oldZoom
-                                        panOffset = (panOffset + mousePos) * actualZoomChange - mousePos
-                                        
-                                        // Constrain pan after zoom
-                                        if (zoomFactor > 1f) {
-                                            val maxPanX = size.width * (zoomFactor - 1) * 0.5f
-                                            val maxPanY = size.height * (zoomFactor - 1) * 0.5f
-                                            if (maxPanX > 0f && maxPanY > 0f) {
-                                                panOffset = Offset(
-                                                    panOffset.x.coerceIn(-maxPanX, maxPanX),
-                                                    panOffset.y.coerceIn(-maxPanY, maxPanY)
-                                                )
-                                            }
-                                        } else {
-                                            panOffset = Offset.Zero
-                                        }
+                                        // Scale existing pan offset with zoom change
+                                        val zoomRatio = newZoom / oldZoom
+                                        panOffset = panOffset * zoomRatio
                                         
                                         change.consume()
                                     } else {
@@ -209,23 +198,9 @@ fun PdfMid(
                                             val newZoom = (zoomFactor * zoom).coerceIn(minZoom, maxZoom)
                                             zoomFactor = newZoom
                                             
-                                            // Zoom towards centroid (trackpad pinch center)
-                                            val actualZoomChange = newZoom / oldZoom
-                                            panOffset = (panOffset + centroid) * actualZoomChange - centroid
-                                            
-                                            // Constrain pan after zoom
-                                            if (zoomFactor > 1f) {
-                                                val maxPanX = size.width * (zoomFactor - 1) * 0.5f
-                                                val maxPanY = size.height * (zoomFactor - 1) * 0.5f
-                                                if (maxPanX > 0f && maxPanY > 0f) {
-                                                    panOffset = Offset(
-                                                        panOffset.x.coerceIn(-maxPanX, maxPanX),
-                                                        panOffset.y.coerceIn(-maxPanY, maxPanY)
-                                                    )
-                                                }
-                                            } else {
-                                                panOffset = Offset.Zero
-                                            }
+                                            // Scale existing pan offset with zoom change
+                                            val zoomRatio = newZoom / oldZoom
+                                            panOffset = panOffset * zoomRatio
                                         }
                                         
                                         if (pan != Offset.Zero && zoomFactor > 1f) {
@@ -357,8 +332,13 @@ fun PdfMid(
             ) {
                 IconButton(
                     onClick = {
-                        zoomFactor = max(minZoom, zoomFactor * 0.8f)
-                        panOffset = Offset.Zero // Reset pan on zoom
+                        val oldZoom = zoomFactor
+                        val newZoom = max(minZoom, zoomFactor * 0.8f)
+                        zoomFactor = newZoom
+                        
+                        // Scale existing pan offset with zoom change
+                        val zoomRatio = newZoom / oldZoom
+                        panOffset = panOffset * zoomRatio
                     },
                     enabled = zoomFactor > minZoom
                 ) {
@@ -373,8 +353,22 @@ fun PdfMid(
                 
                 IconButton(
                     onClick = {
-                        zoomFactor = min(maxZoom, zoomFactor * 1.25f)
-                        panOffset = Offset.Zero // Reset pan on zoom
+                        val oldZoom = zoomFactor
+                        val newZoom = min(maxZoom, zoomFactor * 1.25f)
+                        zoomFactor = newZoom
+                        
+                        // Apply center-based zoom using viewport center
+                        if (viewportSize != IntSize.Zero) {
+                            val centerX = viewportSize.width / 2f
+                            val centerY = viewportSize.height / 2f
+                            val zoomRatio = newZoom / oldZoom
+                            panOffset = Offset(
+                                (panOffset.x + centerX) * zoomRatio - centerX,
+                                (panOffset.y + centerY) * zoomRatio - centerY
+                            )
+                        } else {
+                            panOffset = Offset.Zero
+                        }
                     },
                     enabled = zoomFactor < maxZoom
                 ) {
