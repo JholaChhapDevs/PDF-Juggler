@@ -52,6 +52,12 @@ fun PdfDisplayArea(
                 onTextSelected = { selectedText ->
                     // Handle selected text
                     println("Selected text: $selectedText")
+                },
+                onZoomChanged = { zoomFactor ->
+                    model.onZoomChanged(zoomFactor)
+                },
+                onViewportChanged = { viewport ->
+                    model.onViewportChanged(viewport)
                 }
             )
         }

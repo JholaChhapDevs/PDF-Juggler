@@ -5,8 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.unit.IntSize
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import com.jholachhapdevs.pdfjuggler.core.pdf.HighQualityPdfRenderer
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TableOfContentData
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.PdfFile
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TextPositionData
@@ -30,6 +32,9 @@ import javax.imageio.ImageIO
 class TabScreenModel(
     val pdfFile: PdfFile,
 ) : ScreenModel {
+    
+    // High-quality PDF renderer
+    private val pdfRenderer = HighQualityPdfRenderer()
 
     var thumbnails by mutableStateOf<List<ImageBitmap>>(emptyList())
         private set
@@ -53,6 +58,10 @@ class TabScreenModel(
         private set
     var tableOfContent by mutableStateOf<List<TableOfContentData>>(emptyList())
         private set
+        
+    // Current zoom and viewport state for adaptive rendering
+    private var currentZoom by mutableStateOf(1f)
+    private var currentViewport by mutableStateOf(IntSize.Zero)
 
     init {
         loadPdf()
@@ -64,8 +73,7 @@ class TabScreenModel(
             try {
                 totalPages = getTotalPages(pdfFile.path)
                 thumbnails = renderThumbnails(pdfFile.path, totalPages)
-                currentPageImage = renderPage(pdfFile.path,
-                    0, 150f)
+                currentPageImage = renderPageHighQuality(0)
                 allTextDataWithCoordinates = extractAllTextData(pdfFile.path)
                 allTextData = getTextOnlyData()
                 tableOfContent = getTableOfContents(pdfFile.path)
@@ -82,9 +90,43 @@ class TabScreenModel(
         selectedPageIndex = pageIndex
         screenModelScope.launch {
             try {
-                currentPageImage = renderPage(pdfFile.path, pageIndex, 150f)
+                currentPageImage = renderPageHighQuality(pageIndex)
             } catch (e: Exception) {
                 e.printStackTrace()
+            }
+        }
+    }
+    
+    /**
+     * Called when zoom level changes to re-render at appropriate quality
+     */
+    fun onZoomChanged(zoomFactor: Float) {
+        if (zoomFactor != currentZoom) {
+            currentZoom = zoomFactor
+            // Re-render current page at new zoom level for better quality
+            screenModelScope.launch {
+                try {
+                    currentPageImage = renderPageHighQuality(selectedPageIndex)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+    
+    /**
+     * Called when viewport size changes
+     */
+    fun onViewportChanged(viewport: IntSize) {
+        if (viewport != currentViewport && viewport.width > 0 && viewport.height > 0) {
+            currentViewport = viewport
+            // Re-render for new viewport if significant change
+            screenModelScope.launch {
+                try {
+                    currentPageImage = renderPageHighQuality(selectedPageIndex)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
         }
     }
@@ -95,6 +137,31 @@ class TabScreenModel(
         }
     }
 
+    /**
+     * Render page with high quality using adaptive DPI
+     */
+    private suspend fun renderPageHighQuality(pageIndex: Int): ImageBitmap? {
+        return if (currentViewport.width > 0 && currentViewport.height > 0) {
+            // Use adaptive rendering based on viewport and zoom
+            pdfRenderer.renderPageAdaptive(
+                pdfFile.path,
+                pageIndex,
+                currentViewport.width,
+                currentViewport.height,
+                currentZoom
+            )
+        } else {
+            // Fallback to high-quality rendering with adaptive DPI
+            val adaptiveDPI = HighQualityPdfRenderer.calculateAdaptiveDPI(currentZoom)
+            pdfRenderer.renderPage(
+                pdfFile.path,
+                pageIndex,
+                HighQualityPdfRenderer.RenderOptions(dpi = adaptiveDPI)
+            )
+        }
+    }
+    
+    @Deprecated("Use renderPageHighQuality instead")
     private suspend fun renderPage(filePath: String, pageIndex: Int, dpi: Float = 150f): ImageBitmap? =
         withContext(Dispatchers.IO) {
             try {
@@ -113,14 +180,20 @@ class TabScreenModel(
         withContext(Dispatchers.IO) {
             try {
                 PDDocument.load(File(filePath)).use { document ->
-                    val renderer = PDFRenderer(document)
                     val totalPages = document.numberOfPages
                     val count = minOf(totalPages, maxPages)
 
                     (0 until count).mapNotNull { index ->
                         try {
-                            val bufferedImage: BufferedImage = renderer.renderImageWithDPI(index, 72f, ImageType.RGB)
-                            bufferedImage.toImageBitmap()
+                            // Use high-quality renderer for thumbnails too, but at lower DPI for performance
+                            pdfRenderer.renderPage(
+                                filePath,
+                                index,
+                                HighQualityPdfRenderer.RenderOptions(
+                                    dpi = 96f, // Good balance of quality and performance for thumbnails
+                                    highQuality = true
+                                )
+                            )
                         } catch (e: Exception) {
                             e.printStackTrace()
                             null
