@@ -1,48 +1,31 @@
 package com.jholachhapdevs.pdfjuggler
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import org.jetbrains.compose.resources.painterResource
+import cafe.adriel.voyager.navigator.Navigator
+import cafe.adriel.voyager.transitions.SlideTransition
+import com.jholachhapdevs.pdfjuggler.core.ui.PdfJugglerTheme
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.PdfScreen
+import com.jholachhapdevs.pdfjuggler.feature.update.ui.UpdateScreen
 import org.jetbrains.compose.ui.tooling.preview.Preview
-
-import pdf_juggler.composeapp.generated.resources.Res
-import pdf_juggler.composeapp.generated.resources.compose_multiplatform
 
 @Composable
 @Preview
 fun App() {
-    MaterialTheme {
-        var showContent by remember { mutableStateOf(false) }
-        Column(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .safeContentPadding()
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
+    PdfJugglerTheme {
+        Box(
+            modifier = Modifier.fillMaxSize()
+                .background(color = MaterialTheme.colorScheme.background)
+                .safeContentPadding(),
+//            contentAlignment = Alignment.Center
         ) {
-            Button(onClick = { showContent = !showContent }) {
-                Text("Click me!")
-            }
-            AnimatedVisibility(showContent) {
-                val greeting = remember { Greeting().greet() }
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Image(painterResource(Res.drawable.compose_multiplatform), null)
-                    Text("Compose: $greeting")
-                }
+            Navigator(PdfScreen) {
+                SlideTransition(it)
             }
         }
     }
