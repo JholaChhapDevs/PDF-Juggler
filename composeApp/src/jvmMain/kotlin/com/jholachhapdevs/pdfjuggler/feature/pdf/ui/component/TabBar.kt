@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -24,7 +25,8 @@ fun TabBar(
     tabs: List<Tab>,
     onAdd: () -> Unit,
     onSelect: (Tab) -> Unit,
-    onClose: (Tab) -> Unit
+    onClose: (Tab) -> Unit,
+    onPrint: () -> Unit
 ) {
     val navigator = LocalTabNavigator.current
     Surface(tonalElevation = 2.dp) {
@@ -50,6 +52,13 @@ fun TabBar(
                         onClose = { onClose(tab) }
                     )
                 }
+            }
+            IconButton(onClick = onPrint) {
+                Icon(
+                    imageVector = Icons.Outlined.Print,
+                    contentDescription = "Print",
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
             IconButton(onClick = onAdd) {
                 Icon(
