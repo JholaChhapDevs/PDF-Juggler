@@ -8,6 +8,7 @@ import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.rendering.ImageType
 import org.apache.pdfbox.rendering.PDFRenderer
 import java.awt.RenderingHints
+import java.awt.geom.AffineTransform
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -30,6 +31,7 @@ class HighQualityPdfRenderer {
         val filePath: String,
         val pageIndex: Int,
         val dpi: Float,
+        val rotation: Float,
         val hash: String // Hash of file modification time for cache invalidation
     )
     
@@ -37,7 +39,8 @@ class HighQualityPdfRenderer {
         val dpi: Float = calculateAdaptiveDPI(),
         val imageType: ImageType = ImageType.RGB,
         val antiAliasing: Boolean = true,
-        val highQuality: Boolean = true
+        val highQuality: Boolean = true,
+        val rotation: Float = 0f
     )
     
     companion object {
@@ -103,7 +106,7 @@ class HighQualityPdfRenderer {
             if (!file.exists()) return@withContext null
             
             val fileHash = "${file.lastModified()}-${file.length()}"
-            val cacheKey = PageCacheKey(filePath, pageIndex, options.dpi, fileHash)
+            val cacheKey = PageCacheKey(filePath, pageIndex, options.dpi, options.rotation, fileHash)
             
             // Check cache first
             pageCache[cacheKey]?.let { return@withContext it }
@@ -120,10 +123,17 @@ class HighQualityPdfRenderer {
                 )
                 
                 // Apply high-quality rendering hints if requested
-                val finalImage = if (options.highQuality) {
+                val qualityImage = if (options.highQuality) {
                     applyHighQualityHints(bufferedImage)
                 } else {
                     bufferedImage
+                }
+                
+                // Apply rotation if needed
+                val finalImage = if (options.rotation != 0f) {
+                    rotateImage(qualityImage, options.rotation)
+                } else {
+                    qualityImage
                 }
                 
                 val imageBitmap = finalImage.toComposeImageBitmap()
@@ -178,6 +188,45 @@ class HighQualityPdfRenderer {
     }
     
     /**
+     * Render page with adaptive DPI and rotation support
+     */
+    suspend fun renderPageAdaptiveWithRotation(
+        filePath: String,
+        pageIndex: Int,
+        viewportWidthPx: Int,
+        viewportHeightPx: Int,
+        zoomFactor: Float = 1f,
+        rotation: Float = 0f
+    ): ImageBitmap? = withContext(Dispatchers.IO) {
+        try {
+            // First, get page dimensions
+            PDDocument.load(File(filePath)).use { document ->
+                if (pageIndex >= document.numberOfPages) return@withContext null
+                
+                val page = document.getPage(pageIndex)
+                val mediaBox = page.mediaBox
+                
+                val optimalDPI = calculateOptimalDPI(
+                    mediaBox.width,
+                    mediaBox.height,
+                    viewportWidthPx,
+                    viewportHeightPx,
+                    zoomFactor
+                )
+                
+                renderPage(
+                    filePath,
+                    pageIndex,
+                    RenderOptions(dpi = optimalDPI, rotation = rotation)
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+    
+    /**
      * Apply high-quality rendering hints to improve image quality
      */
     private fun applyHighQualityHints(source: BufferedImage): BufferedImage {
@@ -204,6 +253,46 @@ class HighQualityPdfRenderer {
         }
         
         return enhanced
+    }
+    
+    /**
+     * Rotate image by the specified angle (in degrees)
+     */
+    private fun rotateImage(source: BufferedImage, angleDegrees: Float): BufferedImage {
+        val angleRadians = Math.toRadians(angleDegrees.toDouble())
+        val sin = Math.abs(Math.sin(angleRadians))
+        val cos = Math.abs(Math.cos(angleRadians))
+        
+        val originalWidth = source.width
+        val originalHeight = source.height
+        
+        // Calculate new dimensions after rotation
+        val newWidth = (originalWidth * cos + originalHeight * sin).toInt()
+        val newHeight = (originalWidth * sin + originalHeight * cos).toInt()
+        
+        val rotated = BufferedImage(newWidth, newHeight, source.type)
+        val g2d = rotated.createGraphics()
+        
+        try {
+            // Apply high-quality rendering hints for rotation
+            g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+            
+            // Set up the transform to rotate around center
+            val transform = AffineTransform()
+            transform.translate(newWidth / 2.0, newHeight / 2.0)
+            transform.rotate(angleRadians)
+            transform.translate(-originalWidth / 2.0, -originalHeight / 2.0)
+            
+            g2d.transform = transform
+            g2d.drawImage(source, 0, 0, null)
+            
+        } finally {
+            g2d.dispose()
+        }
+        
+        return rotated
     }
     
     /**

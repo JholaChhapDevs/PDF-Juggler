@@ -7,6 +7,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.RotateLeft
+import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.*
@@ -41,9 +43,12 @@ fun PdfMid(
     modifier: Modifier = Modifier,
     pageImage: ImageBitmap? = null,
     textData: List<TextPositionData> = emptyList(),
+    rotation: Float = 0f,
     onTextSelected: (String) -> Unit = {},
     onZoomChanged: (Float) -> Unit = {},
-    onViewportChanged: (IntSize) -> Unit = {}
+    onViewportChanged: (IntSize) -> Unit = {},
+    onRotateClockwise: () -> Unit = {},
+    onRotateCounterClockwise: () -> Unit = {}
 ) {
     val cs = MaterialTheme.colorScheme
     val clipboardManager = LocalClipboardManager.current
@@ -357,18 +362,9 @@ fun PdfMid(
                         val newZoom = min(maxZoom, zoomFactor * 1.25f)
                         zoomFactor = newZoom
                         
-                        // Apply center-based zoom using viewport center
-                        if (viewportSize != IntSize.Zero) {
-                            val centerX = viewportSize.width / 2f
-                            val centerY = viewportSize.height / 2f
-                            val zoomRatio = newZoom / oldZoom
-                            panOffset = Offset(
-                                (panOffset.x + centerX) * zoomRatio - centerX,
-                                (panOffset.y + centerY) * zoomRatio - centerY
-                            )
-                        } else {
-                            panOffset = Offset.Zero
-                        }
+                        // Scale existing pan offset with zoom change
+                        val zoomRatio = newZoom / oldZoom
+                        panOffset = panOffset * zoomRatio
                     },
                     enabled = zoomFactor < maxZoom
                 ) {
@@ -387,6 +383,21 @@ fun PdfMid(
                         text = "Fit",
                         style = MaterialTheme.typography.bodySmall
                     )
+                }
+                
+                // Rotation controls
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                IconButton(
+                    onClick = onRotateCounterClockwise
+                ) {
+                    Icon(Icons.Default.RotateLeft, "Rotate Left")
+                }
+                
+                IconButton(
+                    onClick = onRotateClockwise
+                ) {
+                    Icon(Icons.Default.RotateRight, "Rotate Right")
                 }
             }
         }

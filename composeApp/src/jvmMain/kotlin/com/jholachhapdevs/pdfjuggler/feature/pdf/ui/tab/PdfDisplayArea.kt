@@ -49,6 +49,7 @@ fun PdfDisplayArea(
                 modifier = Modifier.weight(0.85f).fillMaxSize(),
                 pageImage = model.currentPageImage,
                 textData = model.allTextDataWithCoordinates[model.selectedPageIndex] ?: emptyList(),
+                rotation = model.currentRotation,
                 onTextSelected = { selectedText ->
                     // Handle selected text
                     println("Selected text: $selectedText")
@@ -58,6 +59,12 @@ fun PdfDisplayArea(
                 },
                 onViewportChanged = { viewport ->
                     model.onViewportChanged(viewport)
+                },
+                onRotateClockwise = {
+                    model.rotateClockwise()
+                },
+                onRotateCounterClockwise = {
+                    model.rotateCounterClockwise()
                 }
             )
         }

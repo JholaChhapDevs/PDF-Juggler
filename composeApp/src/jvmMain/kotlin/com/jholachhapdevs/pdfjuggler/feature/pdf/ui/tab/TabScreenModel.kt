@@ -62,6 +62,10 @@ class TabScreenModel(
     // Current zoom and viewport state for adaptive rendering
     private var currentZoom by mutableStateOf(1f)
     private var currentViewport by mutableStateOf(IntSize.Zero)
+    
+    // Current rotation angle (0, 90, 180, 270 degrees)
+    var currentRotation by mutableStateOf(0f)
+        private set
 
     init {
         loadPdf()
@@ -130,6 +134,51 @@ class TabScreenModel(
             }
         }
     }
+    
+    /**
+     * Rotate the current page 90 degrees clockwise
+     */
+    fun rotateClockwise() {
+        currentRotation = (currentRotation + 90f) % 360f
+        // Re-render current page with new rotation
+        screenModelScope.launch {
+            try {
+                currentPageImage = renderPageHighQuality(selectedPageIndex)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+    
+    /**
+     * Rotate the current page 90 degrees counter-clockwise
+     */
+    fun rotateCounterClockwise() {
+        currentRotation = (currentRotation - 90f + 360f) % 360f
+        // Re-render current page with new rotation
+        screenModelScope.launch {
+            try {
+                currentPageImage = renderPageHighQuality(selectedPageIndex)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+    
+    /**
+     * Reset rotation to 0 degrees
+     */
+    fun resetRotation() {
+        currentRotation = 0f
+        // Re-render current page with no rotation
+        screenModelScope.launch {
+            try {
+                currentPageImage = renderPageHighQuality(selectedPageIndex)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     private suspend fun getTotalPages(filePath: String): Int = withContext(Dispatchers.IO) {
         PDDocument.load(File(filePath)).use { doc ->
@@ -143,12 +192,13 @@ class TabScreenModel(
     private suspend fun renderPageHighQuality(pageIndex: Int): ImageBitmap? {
         return if (currentViewport.width > 0 && currentViewport.height > 0) {
             // Use adaptive rendering based on viewport and zoom
-            pdfRenderer.renderPageAdaptive(
+            pdfRenderer.renderPageAdaptiveWithRotation(
                 pdfFile.path,
                 pageIndex,
                 currentViewport.width,
                 currentViewport.height,
-                currentZoom
+                currentZoom,
+                currentRotation
             )
         } else {
             // Fallback to high-quality rendering with adaptive DPI
@@ -156,7 +206,7 @@ class TabScreenModel(
             pdfRenderer.renderPage(
                 pdfFile.path,
                 pageIndex,
-                HighQualityPdfRenderer.RenderOptions(dpi = adaptiveDPI)
+                HighQualityPdfRenderer.RenderOptions(dpi = adaptiveDPI, rotation = currentRotation)
             )
         }
     }
