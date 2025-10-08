@@ -14,6 +14,7 @@ import cafe.adriel.voyager.navigator.tab.CurrentTab
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabNavigator
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.TabBar
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SplitViewComponent
 
 @Composable
 fun PdfTabComponent(
@@ -44,12 +45,26 @@ fun PdfTabComponent(
                     tabs = model.tabs,
                     onAdd = { model.addTabFromPicker() },
                     onSelect = { tab -> model.selectTab(tab) },
-                    onClose = { tab -> model.closeTab(tab) }
+                    onClose = { tab -> model.closeTab(tab) },
+                    isSplitViewEnabled = model.isSplitViewEnabled,
+                    onToggleSplitView = { model.toggleSplitView() }
                 )
             }
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
-                CurrentTab()
+                if (model.isSplitViewEnabled) {
+                    // Split view mode
+                    SplitViewComponent(
+                        leftModel = model.getTabModel(model.splitViewLeftTab),
+                        rightModel = model.getTabModel(model.splitViewRightTab),
+                        availableTabs = model.tabs,
+                        onLeftTabChange = { tab -> model.setSplitViewLeft(tab) },
+                        onRightTabChange = { tab -> model.setSplitViewRight(tab) }
+                    )
+                } else {
+                    // Normal single view mode
+                    CurrentTab()
+                }
             }
         }
     }
