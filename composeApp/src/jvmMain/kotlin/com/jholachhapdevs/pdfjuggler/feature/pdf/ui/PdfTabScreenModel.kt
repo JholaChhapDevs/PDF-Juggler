@@ -15,11 +15,20 @@ import kotlinx.coroutines.launch
 
 class PdfTabScreenModel(
     private val getPdfUseCase: GetPdfUseCase,
+    private val window: java.awt.Window,
     initial: PdfFile? = null
 ) : ScreenModel {
 
     val tabs = mutableStateListOf<Tab>()
     var current: Tab? by mutableStateOf(null)
+        private set
+
+    // Split view support
+    var isSplitViewEnabled by mutableStateOf(false)
+        private set
+    var splitViewLeftTab: Tab? by mutableStateOf(null)
+        private set
+    var splitViewRightTab: Tab? by mutableStateOf(null)
         private set
 
     private val contentCache = LinkedHashMap<String, TabScreenModel>()
@@ -73,6 +82,54 @@ class PdfTabScreenModel(
     }
 
     private fun getOrCreateModel(file: PdfFile): TabScreenModel {
-        return contentCache.getOrPut(file.path) { TabScreenModel(file) }
+        return contentCache.getOrPut(file.path) { TabScreenModel(file, window) }
+    }
+
+    // Split view functions
+    fun enableSplitView() {
+        if (tabs.size >= 2) {
+            isSplitViewEnabled = true
+            splitViewLeftTab = tabs[0]
+            splitViewRightTab = tabs[1]
+        } else if (tabs.size == 1) {
+            isSplitViewEnabled = true
+            splitViewLeftTab = tabs[0]
+            splitViewRightTab = null
+        }
+    }
+
+    fun disableSplitView() {
+        isSplitViewEnabled = false
+        splitViewLeftTab = null
+        splitViewRightTab = null
+    }
+
+    fun setSplitViewLeft(tab: Tab?) {
+        if (tab == null || tab in tabs) {
+            splitViewLeftTab = tab
+        }
+    }
+
+    fun setSplitViewRight(tab: Tab?) {
+        if (tab == null || tab in tabs) {
+            splitViewRightTab = tab
+        }
+    }
+
+    fun toggleSplitView() {
+        if (isSplitViewEnabled) {
+            disableSplitView()
+        } else {
+            enableSplitView()
+        }
+    }
+
+    fun getTabModel(tab: Tab?): TabScreenModel? {
+        return (tab as? PdfTab)?.pdfFile?.let { getOrCreateModel(it) }
+    }
+
+    fun getCurrentTabModel(): TabScreenModel? {
+        val currentPdfTab = current as? PdfTab ?: return null
+        return contentCache[currentPdfTab.pdfFile.path]
     }
 }
