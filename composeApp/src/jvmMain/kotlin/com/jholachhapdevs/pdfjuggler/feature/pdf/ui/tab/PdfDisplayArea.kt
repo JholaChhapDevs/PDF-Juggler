@@ -35,24 +35,33 @@ import androidx.compose.ui.unit.dp
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveDialog
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveResultDialog
+import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiScreenModel
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfLeft
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfMid
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfRight
 
 @Composable
 fun PdfDisplayArea(
-    model: TabScreenModel
+    tabScreenModel: TabScreenModel,
+    aiScreenModel: AiScreenModel
 ) {
     val listState = rememberLazyListState()
     var showSaveAsDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(model.pdfFile.path) {
-        if (model.thumbnails.isNotEmpty()) {
-            val idx = model.selectedPageIndex.coerceIn(0, model.thumbnails.lastIndex)
+    // Keep left pane scrolled to the selected page
+    LaunchedEffect(tabScreenModel.pdfFile.path) {
+        if (tabScreenModel.thumbnails.isNotEmpty()) {
+            val idx = tabScreenModel.selectedPageIndex.coerceIn(0, tabScreenModel.thumbnails.lastIndex)
             listState.scrollToItem(idx, 0)
         }
     }
 
-    if (model.isLoading) {
+    // Keep AI model in sync with the current selected page
+    LaunchedEffect(tabScreenModel.selectedPageIndex) {
+        aiScreenModel.setSelectedPage(tabScreenModel.selectedPageIndex)
+    }
+
+    if (tabScreenModel.isLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
