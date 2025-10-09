@@ -30,9 +30,9 @@ fun buildHttpClient(engine: HttpClientEngine): HttpClient {
         }
 
         install(HttpTimeout) {
-            requestTimeoutMillis = 6000
-            connectTimeoutMillis = 3000
-            socketTimeoutMillis = 6000
+            requestTimeoutMillis = 60_000
+            connectTimeoutMillis = 30_000
+            socketTimeoutMillis = 60_000
         }
     }
 }

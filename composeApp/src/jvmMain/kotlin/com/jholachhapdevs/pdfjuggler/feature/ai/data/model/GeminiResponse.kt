@@ -1,4 +1,4 @@
-package com.jholachhapdevs.pdfjuggler.feature.ai.data
+package com.jholachhapdevs.pdfjuggler.feature.ai.data.model
 
 import kotlinx.serialization.Serializable
 

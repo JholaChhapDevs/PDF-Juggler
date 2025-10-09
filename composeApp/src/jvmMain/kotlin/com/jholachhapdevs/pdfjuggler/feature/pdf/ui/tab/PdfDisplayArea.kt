@@ -10,24 +10,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiScreenModel
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfLeft
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfMid
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfRight
 
 @Composable
 fun PdfDisplayArea(
-    model: TabScreenModel
+    tabScreenModel: TabScreenModel,
+    aiScreenModel: AiScreenModel
 ) {
     val listState = rememberLazyListState()
 
     // When this tab becomes active (composed), ensure the selected page is scrolled to top.
-    LaunchedEffect(model.pdfFile.path) {
-        if (model.thumbnails.isNotEmpty()) {
-            val idx = model.selectedPageIndex.coerceIn(0, model.thumbnails.lastIndex)
+    LaunchedEffect(tabScreenModel.pdfFile.path) {
+        if (tabScreenModel.thumbnails.isNotEmpty()) {
+            val idx = tabScreenModel.selectedPageIndex.coerceIn(0, tabScreenModel.thumbnails.lastIndex)
             listState.scrollToItem(idx, 0)
         }
     }
 
-    if (model.isLoading) {
+    if (tabScreenModel.isLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -38,14 +41,18 @@ fun PdfDisplayArea(
         Row(Modifier.fillMaxSize()) {
             PdfLeft(
                 modifier = Modifier.weight(0.15f).fillMaxSize(),
-                thumbnails = model.thumbnails,
-                selectedIndex = model.selectedPageIndex,
-                onThumbnailClick = { model.selectPage(it) },
+                thumbnails = tabScreenModel.thumbnails,
+                selectedIndex = tabScreenModel.selectedPageIndex,
+                onThumbnailClick = { tabScreenModel.selectPage(it) },
                 listState = listState
             )
             PdfMid(
-                modifier = Modifier.weight(0.85f).fillMaxSize(),
-                pageImage = model.currentPageImage
+                modifier = Modifier.weight(0.65f).fillMaxSize(),
+                pageImage = tabScreenModel.currentPageImage
+            )
+            PdfRight(
+                modifier = Modifier.weight(0.30f).fillMaxSize(),
+                screenModel = aiScreenModel
             )
         }
     }

@@ -1,4 +1,4 @@
-package com.jholachhapdevs.pdfjuggler.feature.ai.data
+package com.jholachhapdevs.pdfjuggler.feature.ai.data.model
 
 import kotlinx.serialization.Serializable
 
@@ -9,6 +9,7 @@ data class GeminiRequest(
 
 @Serializable
 data class GeminiContent(
+    val role: String? = null,
     val parts: List<GeminiPart>
 )
 

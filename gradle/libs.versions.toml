@@ -16,6 +16,12 @@ datastore = "1.1.7"
 kotlinxSerializationJson = "1.9.0"
 coil = "3.3.0"
 
+
+# pdf juggler
+pdfbox = "2.0.29"
+markdown = "0.37.0"
+markdownM3 = "1.0.0-rc01"
+
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
@@ -54,7 +60,6 @@ ktor-client-js = { module = "io.ktor:ktor-client-js", version.ref = "ktor" }
 # datastore
 datastore = { module = "androidx.datastore:datastore", version.ref = "datastore" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
-
 # serialization
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 
@@ -64,7 +69,11 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 
 
 # apache PdfBox
-pdfbox = { module = "org.apache.pdfbox:pdfbox", version = "2.0.29" }
+pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
+
+# markdown
+markdown = { module = "com.mikepenz:multiplatform-markdown-renderer", version.ref = "markdown" }
+markdown-m3 = { module = "com.mikepenz:multiplatform-markdown-renderer-m3", version.ref = "markdown" }
 
 [plugins]
 composeHotReload = { id = "org.jetbrains.compose.hot-reload", version.ref = "composeHotReload" }
@@ -99,6 +108,7 @@ basics = [
     "material-kolor",
     "colorpicker-compose",
 
-    "pdfbox"
+    "pdfbox",
+    "markdown",
+    "markdown-m3",
 ]
-
