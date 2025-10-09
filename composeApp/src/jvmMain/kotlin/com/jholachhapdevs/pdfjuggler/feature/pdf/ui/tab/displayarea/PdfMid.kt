@@ -58,6 +58,7 @@ fun PdfMid(
     var selectionEnd by remember { mutableStateOf<Offset?>(null) }
     var selectedText by remember { mutableStateOf("") }
     var isSelecting by remember { mutableStateOf(false) }
+    var selectedRectsNormalized by remember { mutableStateOf<List<Rect>>(emptyList()) }
 
     // Vertical scroll state
     val scrollState = rememberScrollState()
@@ -245,54 +246,27 @@ fun PdfMid(
                                 contentScale = ContentScale.FillWidth
                             )
 
-                            // Text Layer - Canvas for drawing text bounds
+                            // Text Layer - Canvas for drawing selection highlight only
                             Canvas(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(aspectRatio)
                             ) {
-                                // Canvas size matches the displayed image size
                                 val canvasWidth = size.width
                                 val canvasHeight = size.height
 
-                                // Draw merged text bounds using normalized coordinates scaled to canvas size
-                                mergedTextBoundsNormalized.forEach { normalizedBounds ->
-                                    val left = normalizedBounds.left * canvasWidth
-                                    val top = normalizedBounds.top * canvasHeight
-                                    val rectWidth = normalizedBounds.width * canvasWidth
-                                    val rectHeight = normalizedBounds.height * canvasHeight
-
+                                // Draw selected text highlight rectangles in yellow
+                                val toDraw = mergeRectsOnLines(selectedRectsNormalized)
+                                toDraw.forEach { nb ->
+                                    val left = nb.left * canvasWidth
+                                    val top = nb.top * canvasHeight
+                                    val rectWidth = nb.width * canvasWidth
+                                    val rectHeight = nb.height * canvasHeight
                                     drawRect(
-                                        color = androidx.compose.ui.graphics.Color.Red.copy(alpha = 0.25f),
+                                        color = androidx.compose.ui.graphics.Color(0xFFFFEB3B).copy(alpha = 0.45f),
                                         topLeft = Offset(left, top),
                                         size = Size(rectWidth, rectHeight)
                                     )
-                                }
-
-                                // Optionally, draw glyph boxes as thin outlines (debug)
-                                // textBoundsNormalized.forEach { (nb, _) ->
-                                //     val l = nb.left * canvasWidth
-                                //     val t = nb.top * canvasHeight
-                                //     val w = nb.width * canvasWidth
-                                //     val h = nb.height * canvasHeight
-                                //     drawRect(color = Color.Red.copy(alpha = 0.8f), topLeft = Offset(l, t), size = Size(w, h), style = Stroke(width = 1f))
-                                // }
-
-                                // Draw selection rectangle if active
-                                selectionStart?.let { start ->
-                                    selectionEnd?.let { end ->
-                                        drawRect(
-                                            color = androidx.compose.ui.graphics.Color(0x4000BFFF),
-                                            topLeft = Offset(
-                                                minOf(start.x, end.x),
-                                                minOf(start.y, end.y)
-                                            ),
-                                            size = Size(
-                                                abs(end.x - start.x),
-                                                abs(end.y - start.y)
-                                            )
-                                        )
-                                    }
                                 }
                             }
 
@@ -313,46 +287,40 @@ fun PdfMid(
                                                         selectionEnd = position
                                                         isSelecting = true
                                                         selectedText = ""
+                                                        selectedRectsNormalized = emptyList()
                                                     }
 
                                                     PointerEventType.Move -> {
                                                         if (isSelecting) {
                                                             selectionEnd = event.changes.first().position
 
-                                                            // Calculate selected text
                                                             selectionStart?.let { start ->
                                                                 selectionEnd?.let { end ->
-                                                                    val selectionRect = Rect(
-                                                                        left = minOf(start.x, end.x),
-                                                                        top = minOf(start.y, end.y),
-                                                                        right = maxOf(start.x, end.x),
-                                                                        bottom = maxOf(start.y, end.y)
-                                                                    )
+                                                                    val minX = minOf(start.x, end.x)
+                                                                    val minY = minOf(start.y, end.y)
+                                                                    val maxX = maxOf(start.x, end.x)
+                                                                    val maxY = maxOf(start.y, end.y)
 
-                                                                    // Use the pointer input scope size
-                                                                    val canvasWidth = size.width
-                                                                    val canvasHeight = size.height
+                                                                    val width = size.width
+                                                                    val height = size.height
+                                                                    if (width > 0f && height > 0f) {
+                                                                        val selNorm = Rect(
+                                                                            left = (minX / width).coerceIn(0f, 1f),
+                                                                            top = (minY / height).coerceIn(0f, 1f),
+                                                                            right = (maxX / width).coerceIn(0f, 1f),
+                                                                            bottom = (maxY / height).coerceIn(0f, 1f)
+                                                                        )
 
-                                                                    // Find text elements that intersect with selection
-                                                                    val selectedTexts = textBoundsNormalized
-                                                                        .filter { (normalizedBounds, _) ->
-                                                                            val left = normalizedBounds.left * canvasWidth
-                                                                            val top = normalizedBounds.top * canvasHeight
-                                                                            val right = normalizedBounds.right * canvasWidth
-                                                                            val bottom = normalizedBounds.bottom * canvasHeight
-
-                                                                            val textRect = Rect(left, top, right, bottom)
-                                                                            textRect.overlaps(selectionRect)
-                                                                        }
-                                                                        .sortedWith(compareBy(
-                                                                            { (normalizedBounds, _) -> normalizedBounds.top },
-                                                                            { (normalizedBounds, _) -> normalizedBounds.left }
+                                                                        val selectedPairs = textBoundsNormalized.filter { (nb, _) ->
+                                                                            nb.overlaps(selNorm)
+                                                                        }.sortedWith(compareBy(
+                                                                            { (nb, _) -> nb.top },
+                                                                            { (nb, _) -> nb.left }
                                                                         ))
-                                                                        .map { (_, text) -> text.text }
 
-                                                                    selectedText = selectedTexts.joinToString("")
-                                                                    if (selectedText.isNotEmpty()) {
-                                                                        onTextSelected(selectedText)
+                                                                        selectedRectsNormalized = selectedPairs.map { it.first }
+                                                                        selectedText = selectedPairs.joinToString("") { it.second.text }
+                                                                        if (selectedText.isNotEmpty()) onTextSelected(selectedText)
                                                                     }
                                                                 }
                                                             }
@@ -362,12 +330,11 @@ fun PdfMid(
                                                     PointerEventType.Release -> {
                                                         if (isSelecting && selectedText.isNotBlank()) {
                                                             clipboardManager.setText(AnnotatedString(selectedText))
-                                                            println("Text copied to clipboard: $selectedText")
                                                         }
                                                         isSelecting = false
-                                                        // Clear selection after a moment
+                                                        // Keep highlights until next click; clear marquee
                                                         coroutineScope.launch {
-                                                            delay(500)
+                                                            delay(100)
                                                             selectionStart = null
                                                             selectionEnd = null
                                                         }
