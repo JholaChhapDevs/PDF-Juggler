@@ -1,11 +1,10 @@
 package com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.SaveAs
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.key.*
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveDialog
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveResultDialog
@@ -24,7 +24,6 @@ fun PdfDisplayArea(
     model: TabScreenModel
 ) {
     val listState = rememberLazyListState()
-    var showSaveDialog by remember { mutableStateOf(false) }
     var showSaveAsDialog by remember { mutableStateOf(false) }
 
     // When this tab becomes active (composed), ensure the selected page is scrolled to top.
@@ -46,7 +45,24 @@ fun PdfDisplayArea(
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
     } else {
-        Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .onKeyEvent { event ->
+                    // Handle Ctrl+Shift+T to print text data with coordinates
+                    if (event.type == KeyEventType.KeyDown &&
+                        event.key == Key.T &&
+                        event.isCtrlPressed &&
+                        event.isShiftPressed
+                    ) {
+                        model.printCurrentPageTextWithCoordinates()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .focusable()
+        ) {
             // Save Controls Bar (shown when there are page changes)
             if (model.hasPageChanges) {
                 Card(
@@ -138,18 +154,17 @@ fun PdfDisplayArea(
                         listState = listState
                     )
                 }
+                val originalPageIndex = model.getOriginalPageIndex(model.selectedPageIndex)
+                val pageSizePts = model.getPageSizePointsForDisplayIndex(model.selectedPageIndex)
                PdfMid(
                     modifier = Modifier.weight(if (model.isFullscreen) 1f else 0.85f).fillMaxSize(),
                     pageImage = model.currentPageImage,
-                    textData = model.allTextDataWithCoordinates[model.selectedPageIndex] ?: emptyList(),
+                    textData = model.allTextDataWithCoordinates[originalPageIndex] ?: emptyList(),
                     rotation = model.currentRotation,
                     isFullscreen = model.isFullscreen,
                     onTextSelected = { selectedText ->
                         // Handle selected text
                         println("Selected text: $selectedText")
-                    },
-                    onZoomChanged = { zoomFactor ->
-                        model.onZoomChanged(zoomFactor)
                     },
                     onViewportChanged = { viewport ->
                         model.onViewportChanged(viewport)
@@ -162,7 +177,8 @@ fun PdfDisplayArea(
                     },
                     onToggleFullscreen = {
                         model.toggleFullscreen()
-                    }
+                    },
+                    pageSizePoints = pageSizePts
                 )
             }
         }

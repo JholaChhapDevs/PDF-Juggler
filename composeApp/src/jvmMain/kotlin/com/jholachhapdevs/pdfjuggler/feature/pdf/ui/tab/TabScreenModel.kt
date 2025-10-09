@@ -21,8 +21,8 @@ import kotlinx.coroutines.withContext
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination
-import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageXYZDestination
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem
 import org.apache.pdfbox.rendering.ImageType
 import org.apache.pdfbox.rendering.PDFRenderer
@@ -30,6 +30,7 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.imageio.ImageIO
+import androidx.compose.ui.geometry.Size
 
 class TabScreenModel(
     val pdfFile: PdfFile,
@@ -92,6 +93,10 @@ class TabScreenModel(
     var saveResult by mutableStateOf<SaveResult?>(null)
         private set
 
+    // Map of page index -> page size in PDF points (mediaBox width/height)
+    var pageSizesPoints by mutableStateOf<Map<Int, Size>>(emptyMap())
+        private set
+
     init {
         loadPdf()
     }
@@ -108,6 +113,11 @@ class TabScreenModel(
                 allTextDataWithCoordinates = extractAllTextData(pdfFile.path)
                 allTextData = getTextOnlyData()
                 tableOfContent = getTableOfContents(pdfFile.path)
+                // Extract page sizes in points for proper coordinate mapping
+                pageSizesPoints = extractPageSizesPoints(pdfFile.path)
+
+                // Automatically print text data with coordinates for all pages after loading
+                printAllPagesTextWithCoordinates()
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -366,12 +376,13 @@ class TabScreenModel(
             displayIndex
         }
     }
-    
+
     /**
-     * Get the display index for a given original page index
+     * Helper to fetch the page size (in PDF points) for the given display index.
      */
-    fun getDisplayIndex(originalPageIndex: Int): Int {
-        return pageOrder.indexOf(originalPageIndex)
+    fun getPageSizePointsForDisplayIndex(displayIndex: Int): Size? {
+        val original = getOriginalPageIndex(displayIndex)
+        return pageSizesPoints[original]
     }
     
     /**
@@ -582,6 +593,19 @@ class TabScreenModel(
         }
     }
 
+    // Extract page sizes (MediaBox width/height) in PDF points for each page
+    private fun extractPageSizesPoints(filePath: String): Map<Int, Size> {
+        PDDocument.load(File(filePath)).use { document ->
+            val sizes = mutableMapOf<Int, Size>()
+            for (i in 0 until document.numberOfPages) {
+                val page = document.getPage(i)
+                val mb = page.mediaBox
+                sizes[i] = Size(mb.width, mb.height)
+            }
+            return sizes
+        }
+    }
+
     private suspend fun getTableOfContents(filePath: String): List<TableOfContentData> = withContext(Dispatchers.IO) {
         PDDocument.load(File(filePath)).use { document ->
             val outline: PDDocumentOutline? = document.documentCatalog.documentOutline
@@ -634,5 +658,72 @@ class TabScreenModel(
             destinationY = destinationY,
             children = children
         )
+    }
+
+    /**
+     * Print text data with coordinates for all pages to console
+     */
+    private fun printAllPagesTextWithCoordinates() {
+        println("\n" + "=".repeat(80))
+        println("PDF TEXT DATA WITH COORDINATES - ${pdfFile.name}")
+        println("Total Pages: $totalPages")
+        println("=".repeat(80))
+
+        for (pageIndex in 0 until totalPages) {
+            val textData = allTextDataWithCoordinates[pageIndex]
+
+            println("\n" + "-".repeat(80))
+            println("PAGE ${pageIndex + 1} of $totalPages")
+            println("-".repeat(80))
+
+            if (textData.isNullOrEmpty()) {
+                println("No text data found on this page")
+            } else {
+                println("Total Text Elements: ${textData.size}")
+                println()
+
+                textData.forEachIndexed { index, data ->
+                    println("[${index + 1}] Text: '${data.text}' | X: ${String.format("%.2f", data.x)} | Y: ${String.format("%.2f", data.y)} | W: ${String.format("%.2f", data.width)} | H: ${String.format("%.2f", data.height)}")
+                }
+            }
+        }
+
+        println("\n" + "=".repeat(80))
+        println("END OF PDF TEXT DATA")
+        println("=".repeat(80) + "\n")
+    }
+
+    /**
+     * Print text data with coordinates for the current page to console
+     */
+    fun printCurrentPageTextWithCoordinates() {
+        val originalPageIndex = getOriginalPageIndex(selectedPageIndex)
+        val textData = allTextDataWithCoordinates[originalPageIndex]
+
+        if (textData.isNullOrEmpty()) {
+            println("=" .repeat(60))
+            println("No text data found for page ${selectedPageIndex + 1} (original page ${originalPageIndex + 1})")
+            println("=" .repeat(60))
+            return
+        }
+
+        println("\n" + "=".repeat(60))
+        println("TEXT DATA WITH COORDINATES FOR PAGE ${selectedPageIndex + 1}")
+        println("Original Page Index: ${originalPageIndex + 1}")
+        println("Total Text Elements: ${textData.size}")
+        println("=".repeat(60))
+
+        textData.forEachIndexed { index, data ->
+            println("\n[Element ${index + 1}]")
+            println("  Text: '${data.text}'")
+            println("  X: ${String.format("%.2f", data.x)}")
+            println("  Y: ${String.format("%.2f", data.y)}")
+            println("  Width: ${String.format("%.2f", data.width)}")
+            println("  Height: ${String.format("%.2f", data.height)}")
+        }
+
+        println("\n" + "=".repeat(60))
+        println("END OF PAGE ${selectedPageIndex + 1} TEXT DATA")
+        println("=".repeat(60) + "\n")
     }
 }
