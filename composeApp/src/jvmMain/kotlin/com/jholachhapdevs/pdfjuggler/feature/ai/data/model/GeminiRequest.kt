@@ -1,4 +1,3 @@
-// Kotlin
 package com.jholachhapdevs.pdfjuggler.feature.ai.data.model
 
 import kotlinx.serialization.SerialName
@@ -19,5 +18,7 @@ data class GeminiContent(
 data class GeminiPart(
     val text: String? = null,
     @SerialName("inline_data")
-    val inlineData: GeminiInlineData? = null
+    val inlineData: GeminiInlineData? = null,
+    @SerialName("file_data")
+    val fileData: GeminiFileData? = null
 )

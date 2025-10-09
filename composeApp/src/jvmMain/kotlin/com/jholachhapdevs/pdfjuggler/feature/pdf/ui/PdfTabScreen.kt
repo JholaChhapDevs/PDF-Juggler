@@ -1,4 +1,3 @@
-// Kotlin
 package com.jholachhapdevs.pdfjuggler.feature.pdf.ui
 
 import androidx.compose.runtime.Composable
