@@ -157,7 +157,10 @@ fun PdfDisplayArea(
                 val originalPageIndex = model.getOriginalPageIndex(model.selectedPageIndex)
                 val pageSizePts = model.getPageSizePointsForDisplayIndex(model.selectedPageIndex)
                PdfMid(
-                    modifier = Modifier.weight(if (model.isFullscreen) 1f else 0.85f).fillMaxSize(),
+                    modifier = Modifier
+                        .weight(if (model.isFullscreen) 1f else 0.85f)
+                        .fillMaxSize()
+                        .padding(top = 24.dp), // add gap only above the PDF area
                     pageImage = model.currentPageImage,
                     textData = model.allTextDataWithCoordinates[originalPageIndex] ?: emptyList(),
                     rotation = model.currentRotation,
@@ -178,7 +181,8 @@ fun PdfDisplayArea(
                     onToggleFullscreen = {
                         model.toggleFullscreen()
                     },
-                    pageSizePoints = pageSizePts
+                    pageSizePoints = pageSizePts,
+                    onZoomChanged = { z -> model.onZoomChanged(z) }
                 )
             }
         }

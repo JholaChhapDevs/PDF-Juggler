@@ -27,7 +27,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-
 @Composable
 fun PdfTabComponent(
     model: PdfTabScreenModel
@@ -71,7 +70,11 @@ fun PdfTabComponent(
                 )
             }
         ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding)) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
                 if (model.isSplitViewEnabled) {
                     // Split view mode
                     SplitViewComponent(

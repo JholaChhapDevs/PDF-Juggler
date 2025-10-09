@@ -9,6 +9,9 @@ import androidx.compose.material.icons.automirrored.filled.RotateLeft
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
+import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,18 +21,21 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TextPositionData
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.max
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -45,7 +51,9 @@ fun PdfMid(
     onRotateCounterClockwise: () -> Unit = {},
     onToggleFullscreen: () -> Unit = {},
     // New: size of the PDF page in points (mediaBox width/height)
-    pageSizePoints: Size? = null
+    pageSizePoints: Size? = null,
+    // New: notify zoom changes to parent
+    onZoomChanged: (Float) -> Unit = {}
 ) {
     val cs = MaterialTheme.colorScheme
     val clipboardManager = LocalClipboardManager.current
@@ -59,9 +67,6 @@ fun PdfMid(
     var selectedText by remember { mutableStateOf("") }
     var isSelecting by remember { mutableStateOf(false) }
     var selectedRectsNormalized by remember { mutableStateOf<List<Rect>>(emptyList()) }
-
-    // Vertical scroll state
-    val scrollState = rememberScrollState()
 
     // Notify parent about viewport changes
     LaunchedEffect(viewportSize) {
@@ -196,22 +201,75 @@ fun PdfMid(
         normalized
     }
 
-    // Build merged, larger rectangles just for drawing
-    val mergedTextBoundsNormalized = remember(textBoundsNormalized) {
-        val rects = textBoundsNormalized.map { it.first }
-        mergeRectsOnLines(rects)
+    // --- Zoom & Pan state (use zoom functionality from provided file) ---
+    var zoomFactor by remember { mutableStateOf(1f) }
+    var panOffset by remember { mutableStateOf(Offset.Zero) }
+    var contentBaseSize by remember { mutableStateOf(IntSize.Zero) } // size of unscaled content (image area)
+
+    // Set a constant minimum zoom to allow zooming out below 100%
+    val minZoom = 0.25f
+    val maxZoom = 5f
+
+    // Remove previous dynamic min zoom correction; only ensure zoomFactor stays within [minZoom, maxZoom]
+    LaunchedEffect(zoomFactor) {
+        if (zoomFactor < minZoom) {
+            zoomFactor = minZoom
+            panOffset = Offset.Zero
+        } else if (zoomFactor > maxZoom) {
+            zoomFactor = maxZoom
+        }
+        onZoomChanged(zoomFactor)
     }
 
-    Surface(
-        color = cs.background,
-        tonalElevation = 0.dp,
-        modifier = modifier
-    ) {
+    fun clampPan(viewSize: IntSize, base: IntSize, scale: Float, current: Offset): Offset {
+        if (viewSize.width == 0 || viewSize.height == 0 || base.width == 0 || base.height == 0) return Offset.Zero
+        val scaledW = base.width * scale
+        val scaledH = base.height * scale
+        val halfExcessW = max(0f, (scaledW - viewSize.width) / 2f)
+        val halfExcessH = max(0f, (scaledH - viewSize.height) / 2f)
+        val clampedX = current.x.coerceIn(-halfExcessW, halfExcessW)
+        val clampedY = current.y.coerceIn(-halfExcessH, halfExcessH)
+        return Offset(clampedX, clampedY)
+    }
+
+    fun setZoomAroundAnchor(newZoom: Float, anchorInView: Offset) {
+        val oldZoom = zoomFactor
+        val nz = newZoom.coerceIn(minZoom, maxZoom)
+        if (contentBaseSize.width == 0 || contentBaseSize.height == 0) {
+            zoomFactor = nz; return
+        }
+        val t = panOffset
+        val tx = anchorInView.x - ((anchorInView.x - t.x) / oldZoom) * nz
+        val ty = anchorInView.y - ((anchorInView.y - t.y) / oldZoom) * nz
+        panOffset = clampPan(viewportSize, contentBaseSize, nz, Offset(tx, ty))
+        zoomFactor = nz
+    }
+
+    // Replace resetZoom to set to 100% instead of fit-to-parent
+    fun resetZoom() {
+        zoomFactor = 1f
+        panOffset = Offset.Zero
+    }
+    fun zoomInStep() { setZoomAroundAnchor(zoomFactor * 1.25f, Offset(viewportSize.width/2f, viewportSize.height/2f)) }
+    fun zoomOutStep() { setZoomAroundAnchor(zoomFactor / 1.25f, Offset(viewportSize.width/2f, viewportSize.height/2f)) }
+
+    Surface(color = cs.background, tonalElevation = 0.dp, modifier = modifier) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(cs.background)
-                .onSizeChanged { size -> viewportSize = size },
+                .onSizeChanged { size -> viewportSize = size }
+                .onKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.isCtrlPressed) {
+                        when (event.key) {
+                            Key.Equals, Key.Plus, Key.NumPadAdd -> { zoomInStep(); true }
+                            Key.Minus, Key.NumPadSubtract -> { zoomOutStep(); true }
+                            Key.Zero, Key.NumPad0 -> { resetZoom(); true }
+                            else -> false
+                        }
+                    } else false
+                }
+                .focusable(),
             contentAlignment = Alignment.TopCenter
         ) {
             if (pageImage != null) {
@@ -221,22 +279,74 @@ fun PdfMid(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxSize(0.95f)
                 ) {
-                    // Vertical scroll container
-                    Column(
+                    // No outer verticalScroll; we handle panning ourselves with clamping
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .verticalScroll(scrollState)
                             .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        contentAlignment = Alignment.TopCenter
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.TopCenter
-                        ) {
-                            // Calculate aspect ratio
-                            val aspectRatio = pageImage.width.toFloat() / pageImage.height.toFloat()
+                        // Calculate aspect ratio
+                        val aspectRatio = pageImage.width.toFloat() / pageImage.height.toFloat()
 
-                            // PDF Image filling width
+                        // Zoomable container applying scale and translation
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(aspectRatio)
+                                .onSizeChanged { contentBaseSize = it }
+                                .graphicsLayer(
+                                    scaleX = zoomFactor,
+                                    scaleY = zoomFactor,
+                                    translationX = panOffset.x,
+                                    translationY = panOffset.y
+                                )
+                                // Ctrl+wheel zoom, plain wheel pan only if scaled content exceeds viewport
+                                .pointerInput("ctrl_wheel_zoom_and_pan") {
+                                    awaitPointerEventScope {
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            if (event.type == PointerEventType.Scroll) {
+                                                val change = event.changes.firstOrNull() ?: continue
+                                                val scroll = change.scrollDelta
+                                                if (event.keyboardModifiers.isCtrlPressed) {
+                                                    val factor = if (scroll.y > 0) 0.9f else 1.1f
+                                                    val nz = (zoomFactor * factor)
+                                                    setZoomAroundAnchor(nz, change.position)
+                                                    change.consume()
+                                                } else {
+                                                    val scaledW = contentBaseSize.width * zoomFactor
+                                                    val scaledH = contentBaseSize.height * zoomFactor
+                                                    val canPan = scaledW > viewportSize.width || scaledH > viewportSize.height
+                                                    if (canPan) {
+                                                        val panDelta = Offset(
+                                                            x = -scroll.x * 50f,
+                                                            y = -scroll.y * 50f
+                                                        )
+                                                        panOffset = clampPan(
+                                                            viewportSize,
+                                                            contentBaseSize,
+                                                            zoomFactor,
+                                                            panOffset + panDelta
+                                                        )
+                                                        change.consume()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                // Pinch zoom only (no drag pan)
+                                .pointerInput("pinch_zoom_only") {
+                                    detectTransformGestures(panZoomLock = false) { centroid, _, zoom, _ ->
+                                        if (zoom != 1f) {
+                                            setZoomAroundAnchor(zoomFactor * zoom, centroid)
+                                        }
+                                    }
+                                }
+                                .focusable()
+                        ) {
+                            // PDF Image filling width (unscaled; scaling applied by graphicsLayer)
                             Image(
                                 bitmap = pageImage,
                                 contentDescription = "Current Page",
@@ -288,11 +398,15 @@ fun PdfMid(
                                                         isSelecting = true
                                                         selectedText = ""
                                                         selectedRectsNormalized = emptyList()
+                                                        // Consume to prevent parent scroll/pan on drag start
+                                                        event.changes.forEach { it.consume() }
                                                     }
 
                                                     PointerEventType.Move -> {
                                                         if (isSelecting) {
                                                             selectionEnd = event.changes.first().position
+                                                            // Consume to prevent parent scroll while dragging
+                                                            event.changes.forEach { it.consume() }
 
                                                             selectionStart?.let { start ->
                                                                 selectionEnd?.let { end ->
@@ -355,7 +469,7 @@ fun PdfMid(
                 )
             }
 
-            // Rotation and fullscreen controls - positioned on top layer
+            // Rotation, zoom and fullscreen controls - positioned on top layer
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -379,6 +493,20 @@ fun PdfMid(
                     onClick = onRotateClockwise
                 ) {
                     Icon(Icons.AutoMirrored.Filled.RotateRight, "Rotate Right")
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Zoom controls
+                IconButton(onClick = { zoomOutStep() }, enabled = zoomFactor > minZoom + 1e-4f) {
+                    Icon(Icons.Filled.ZoomOut, "Zoom Out")
+                }
+                JText(text = "${(zoomFactor * 100).toInt()}%")
+                IconButton(onClick = { zoomInStep() }) {
+                    Icon(Icons.Filled.ZoomIn, "Zoom In")
+                }
+                IconButton(onClick = { resetZoom() }) {
+                    Icon(Icons.Outlined.RestartAlt, "Reset Zoom")
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
