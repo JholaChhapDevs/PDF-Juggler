@@ -209,14 +209,26 @@ class PdfGenerationService {
 
     private fun generatePagesPerSheet(sourceDoc: PDDocument, outputDoc: PDDocument, pagesPerSheet: Int) {
         val sourcePages = sourceDoc.pages.toList()
+        val layerUtility = LayerUtility(outputDoc)
 
+        // If only 1 page per sheet, import pages properly
         if (pagesPerSheet <= 1) {
-            sourcePages.forEach { outputDoc.addPage(it) }
+            sourcePages.forEach { sourcePage ->
+                val targetPage = PDPage(sourcePage.mediaBox)
+                outputDoc.addPage(targetPage)
+
+                val contentStream = PDPageContentStream(outputDoc, targetPage)
+                try {
+                    val form = layerUtility.importPageAsForm(sourceDoc, sourcePage)
+                    contentStream.drawForm(form)
+                } finally {
+                    contentStream.close()
+                }
+            }
             return
         }
 
         val pageGroups = sourcePages.chunked(pagesPerSheet)
-        val layerUtility = LayerUtility(outputDoc)
 
         for (group in pageGroups) {
             val targetPageSize = PDRectangle.A4
@@ -225,34 +237,49 @@ class PdfGenerationService {
 
             val contentStream = PDPageContentStream(outputDoc, targetPage)
 
-            val cols = if (pagesPerSheet > 1) 2 else 1
-            val rows = (pagesPerSheet + cols - 1) / cols
+            try {
+                // Use 2 columns for 2-4 pages
+                val cols = 2
+                val rows = if (pagesPerSheet == 2) 1 else 2
 
-            val cellWidth = targetPageSize.width / cols
-            val cellHeight = targetPageSize.height / rows
+                val cellWidth = targetPageSize.width / cols
+                val cellHeight = targetPageSize.height / rows
 
-            group.forEachIndexed { index, sourcePage ->
-                val form = layerUtility.importPageAsForm(sourceDoc, sourcePage)
+                group.forEachIndexed { index, sourcePage ->
+                    try {
+                        val form = layerUtility.importPageAsForm(sourceDoc, sourcePage)
 
-                val col = index % cols
-                val row = rows - 1 - (index / cols)
+                        val col = index % cols
+                        val row = index / cols
 
-                val targetX = col * cellWidth
-                val targetY = row * cellHeight
+                        val targetX = col * cellWidth
+                        val targetY = targetPageSize.height - ((row + 1) * cellHeight)
 
-                val sourceSize = sourcePage.mediaBox
-                val scale = minOf(cellWidth / sourceSize.width, cellHeight / sourceSize.height)
+                        val sourceSize = sourcePage.mediaBox
+                        val scale = minOf(cellWidth / sourceSize.width, cellHeight / sourceSize.height) * 0.90f
 
-                val matrix = Matrix()
-                matrix.translate(targetX, targetY)
-                matrix.scale(scale, scale)
+                        val scaledWidth = sourceSize.width * scale
+                        val scaledHeight = sourceSize.height * scale
 
-                contentStream.saveGraphicsState()
-                contentStream.transform(matrix)
-                contentStream.drawForm(form)
-                contentStream.restoreGraphicsState()
+                        // Center the page within the cell
+                        val xOffset = targetX + (cellWidth - scaledWidth) / 2
+                        val yOffset = targetY + (cellHeight - scaledHeight) / 2
+
+                        val matrix = Matrix()
+                        matrix.translate(xOffset, yOffset)
+                        matrix.scale(scale, scale)
+
+                        contentStream.saveGraphicsState()
+                        contentStream.transform(matrix)
+                        contentStream.drawForm(form)
+                        contentStream.restoreGraphicsState()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            } finally {
+                contentStream.close()
             }
-            contentStream.close()
         }
     }
 
