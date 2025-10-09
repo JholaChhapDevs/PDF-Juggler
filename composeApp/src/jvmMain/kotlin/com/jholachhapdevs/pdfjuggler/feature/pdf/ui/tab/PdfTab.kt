@@ -9,6 +9,7 @@ import com.jholachhapdevs.pdfjuggler.feature.ai.data.remote.GeminiRemoteDataSour
 import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.SendPromptUseCase
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.PdfFile
 import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiScreenModel
+import com.jholachhapdevs.pdfjuggler.feature.update.domain.usecase.GetUpdatesUseCase
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -17,7 +18,6 @@ class PdfTab(
     private val modelProvider: (PdfFile) -> TabScreenModel
 ) : Tab {
 
-    // Unique per tab instance to isolate AI chats/state
     private val tabId: String = UUID.randomUUID().toString()
 
     override val options: TabOptions
@@ -32,15 +32,14 @@ class PdfTab(
 
     @Composable
     override fun Content() {
-        // PDF content model can stay cached by file path (if desired)
         val screenModel = rememberScreenModel(pdfFile.path) {
             modelProvider(pdfFile)
         }
-        // AI chat model is scoped by unique tab id to keep chats separate per tab
         val aiScreenModel = rememberScreenModel("ai-$tabId") {
             AiScreenModel(
                 pdfFile = pdfFile,
-                sendPromptUseCase = SendPromptUseCase(GeminiRemoteDataSource())
+                sendPromptUseCase = SendPromptUseCase(GeminiRemoteDataSource()),
+                initialSelectedPageIndex = screenModel.selectedPageIndex
             )
         }
         PdfDisplayArea(screenModel, aiScreenModel)

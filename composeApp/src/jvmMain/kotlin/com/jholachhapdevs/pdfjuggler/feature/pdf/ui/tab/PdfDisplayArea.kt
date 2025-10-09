@@ -22,12 +22,17 @@ fun PdfDisplayArea(
 ) {
     val listState = rememberLazyListState()
 
-    // When this tab becomes active (composed), ensure the selected page is scrolled to top.
+    // Keep left pane scrolled to the selected page
     LaunchedEffect(tabScreenModel.pdfFile.path) {
         if (tabScreenModel.thumbnails.isNotEmpty()) {
             val idx = tabScreenModel.selectedPageIndex.coerceIn(0, tabScreenModel.thumbnails.lastIndex)
             listState.scrollToItem(idx, 0)
         }
+    }
+
+    // Keep AI model in sync with the current selected page
+    LaunchedEffect(tabScreenModel.selectedPageIndex) {
+        aiScreenModel.setSelectedPage(tabScreenModel.selectedPageIndex)
     }
 
     if (tabScreenModel.isLoading) {
