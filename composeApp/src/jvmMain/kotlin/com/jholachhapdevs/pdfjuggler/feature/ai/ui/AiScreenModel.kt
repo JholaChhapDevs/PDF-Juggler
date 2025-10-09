@@ -1,4 +1,3 @@
-// kotlin
 package com.jholachhapdevs.pdfjuggler.feature.ai.ui
 
 import androidx.compose.runtime.getValue
@@ -22,7 +21,8 @@ class AiScreenModel(
     val pdfFile: PdfFile,
     val sendPromptUseCase: SendPromptUseCase,
     private val uploadFileUseCase: UploadFileUseCase,
-    initialSelectedPageIndex: Int
+    initialSelectedPageIndex: Int,
+    val assistantName: String = "Ringmaster"
 ) : ScreenModel {
 
     companion object {

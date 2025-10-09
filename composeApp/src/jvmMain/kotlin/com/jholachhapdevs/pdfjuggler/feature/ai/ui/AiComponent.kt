@@ -1,7 +1,5 @@
-// Kotlin
 package com.jholachhapdevs.pdfjuggler.feature.ai.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -28,7 +26,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Send
@@ -114,7 +111,7 @@ fun AiComponent(screenModel: AiScreenModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Assistant",
+                        text = screenModel.assistantName,
                         style = MaterialTheme.typography.titleLarge,
                         color = cs.onSurface
                     )
@@ -223,7 +220,6 @@ fun AiComponent(screenModel: AiScreenModel) {
                     color = cs.surface,
                     tonalElevation = 0.dp,
                     shape = RoundedCornerShape(12.dp),
-//                    border = BorderStroke(1.dp, cs.outlineVariant),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -306,7 +302,6 @@ private fun MessageBubble(
     val cs = MaterialTheme.colorScheme
     val isUser = message.role == "user"
 
-    // Shared hover source so both bubble and side action can react
     val interaction = remember { MutableInteractionSource() }
     val isHovered by interaction.collectIsHoveredAsState()
 
@@ -317,7 +312,6 @@ private fun MessageBubble(
     ) {
         val borderColor = if (isUser) cs.primary else cs.outlineVariant
 
-        // Chat bubble
         Surface(
             color = cs.surface,
             tonalElevation = 0.dp,
@@ -341,25 +335,5 @@ private fun MessageBubble(
                 }
             }
         }
-
-        // Copy action on hover for AI messages, outside the bubble to avoid overlap
-//        if (!isUser) {
-//            Spacer(Modifier.width(6.dp))
-//            AnimatedVisibility(visible = isHovered) {
-//                Surface(
-//                    shape = CircleShape,
-//                    color = cs.surface,
-//                    tonalElevation = 0.dp,
-//                    border = BorderStroke(1.dp, cs.outlineVariant)
-//                ) {
-//                    IconButton(onClick = onCopy) {
-//                        Icon(
-//                            imageVector = Icons.Outlined.ContentCopy,
-//                            contentDescription = "Copy"
-//                        )
-//                    }
-//                }
-//            }
-//        }
     }
 }

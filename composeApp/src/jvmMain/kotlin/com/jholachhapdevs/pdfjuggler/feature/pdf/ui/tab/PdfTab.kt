@@ -37,11 +37,13 @@ class PdfTab(
         }
         val remote = remember { GeminiRemoteDataSource() }
         val aiScreenModel = rememberScreenModel("ai-$tabId") {
+            val name = "Ringmaster"
             AiScreenModel(
                 pdfFile = pdfFile,
-                sendPromptUseCase = SendPromptUseCase(remote),
+                sendPromptUseCase = SendPromptUseCase(remote, assistantName = name),
                 uploadFileUseCase = UploadFileUseCase(remote),
-                initialSelectedPageIndex = screenModel.selectedPageIndex
+                initialSelectedPageIndex = screenModel.selectedPageIndex,
+                assistantName = name
             )
         }
         PdfDisplayArea(screenModel, aiScreenModel)
