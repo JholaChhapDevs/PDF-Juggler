@@ -34,7 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveDialog
-import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveResultDialog
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfLeft
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfMid
 
@@ -207,12 +206,6 @@ fun PdfDisplayArea(
                 showSaveAsDialog = false
                 model.savePdfAs(path)
             },
-            onValidatePath = { path -> model.validateSavePath(path) }
-        )
-        
-        // Save result dialog
-        SaveResultDialog(
-            result = model.saveResult,
-            onDismiss = { model.clearSaveResult() }
-        )
-    }
+        onValidatePath = { path -> model.validateSavePath(path) }
+    )
+}
