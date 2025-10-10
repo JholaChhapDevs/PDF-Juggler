@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.jholachhapdevs.pdfjuggler.feature.ai.data.remote.GeminiRemoteDataSource
 import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.SendPromptUseCase
+import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.UploadFileUseCase
 import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiScreenModel
 import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -96,10 +97,13 @@ fun PdfTabComponent(
                     val currentTabModel = model.getCurrentTabModel()
                     if (currentTabModel != null) {
                         // Create AiScreenModel for the current tab
+                        val remote = remember { GeminiRemoteDataSource() }
                         val aiScreenModel = remember(currentTabModel.pdfFile.path) {
                             AiScreenModel(
                                 pdfFile = currentTabModel.pdfFile,
-                                sendPromptUseCase = SendPromptUseCase(GeminiRemoteDataSource())
+                                sendPromptUseCase = SendPromptUseCase(remote),
+                                uploadFileUseCase = UploadFileUseCase(remote),
+                                initialSelectedPageIndex = currentTabModel.selectedPageIndex
                             )
                         }
                         

@@ -187,6 +187,11 @@ fun PdfDisplayArea(
             listState.scrollToItem(idx, 0)
         }
     }
+
+    // Keep AI model in sync with the current selected page
+    LaunchedEffect(model.selectedPageIndex) {
+        aiScreenModel?.setSelectedPage(model.selectedPageIndex)
+    }
     
     if (model.isLoading) {
         Box(
