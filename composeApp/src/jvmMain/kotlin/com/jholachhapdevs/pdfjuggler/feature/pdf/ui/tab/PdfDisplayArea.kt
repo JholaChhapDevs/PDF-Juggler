@@ -334,7 +334,8 @@ fun PdfDisplayArea(
                         pageSizePoints = pageSizePts,
                         onZoomChanged = { z -> model.onZoomChanged(z) },
                         searchHighlightPositions = model.currentMatchForDisplayedPage(),
-                        scrollToMatchTrigger = model.scrollToMatchTrigger
+                        scrollToMatchTrigger = model.scrollToMatchTrigger,
+                        pageIndex = originalPageIndex
                     )
                 }
             }

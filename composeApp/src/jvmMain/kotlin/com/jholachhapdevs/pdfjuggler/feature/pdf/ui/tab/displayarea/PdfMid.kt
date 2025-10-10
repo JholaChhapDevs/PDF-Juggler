@@ -57,7 +57,9 @@ fun PdfMid(
     // New: positions to highlight for search match on current page
     searchHighlightPositions: List<TextPositionData> = emptyList(),
     // New: trigger for auto-scrolling to search matches
-    scrollToMatchTrigger: Int = 0
+    scrollToMatchTrigger: Int = 0,
+    // Page index for cache invalidation
+    pageIndex: Int = 0
 ) {
     val cs = MaterialTheme.colorScheme
     val clipboardManager = LocalClipboardManager.current
@@ -163,7 +165,7 @@ fun PdfMid(
     }
 
     // Create bounding boxes for text using PDF points -> normalized to 0..1, then scaled to canvas
-    val textBoundsNormalized = remember(textData, pageImage, pageSizePoints, rotation) {
+    val textBoundsNormalized = remember(textData, pageImage, pageSizePoints, rotation, pageIndex) {
         val rot = ((rotation % 360f) + 360f) % 360f
         val rotInt = when {
             rot in 45f..135f -> 90
@@ -472,7 +474,7 @@ fun PdfMid(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(aspectRatio)
-                                    .pointerInput("text_selection") {
+                                    .pointerInput(textData, textBoundsNormalized) {
                                         awaitPointerEventScope {
                                             while (true) {
                                                 val event = awaitPointerEvent()
