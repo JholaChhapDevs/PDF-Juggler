@@ -123,12 +123,10 @@ fun PdfTabComponent(
                                     delay(3000)
                                     showProgressDialog = false
                                 }
-                                println("ERROR: Could not execute the print command.")
                                 e.printStackTrace()
                             }
                         }
                     } else {
-                        println("Error: Could not get the current PDF to print.")
                     }
                 }
             )

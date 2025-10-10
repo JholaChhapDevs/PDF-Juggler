@@ -138,8 +138,6 @@ class TabScreenModel(
                     clearSearch()
                 }
 
-                // Automatically print text data with coordinates for all pages after loading
-                printAllPagesTextWithCoordinates()
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -778,70 +776,4 @@ class TabScreenModel(
         )
     }
 
-    /**
-     * Print text data with coordinates for all pages to console
-     */
-    private fun printAllPagesTextWithCoordinates() {
-        println("\n" + "=".repeat(80))
-        println("PDF TEXT DATA WITH COORDINATES - ${pdfFile.name}")
-        println("Total Pages: $totalPages")
-        println("=".repeat(80))
-
-        for (pageIndex in 0 until totalPages) {
-            val textData = allTextDataWithCoordinates[pageIndex]
-
-            println("\n" + "-".repeat(80))
-            println("PAGE ${pageIndex + 1} of $totalPages")
-            println("-".repeat(80))
-
-            if (textData.isNullOrEmpty()) {
-                println("No text data found on this page")
-            } else {
-                println("Total Text Elements: ${textData.size}")
-                println()
-
-                textData.forEachIndexed { index, data ->
-                    println("[${index + 1}] Text: '${data.text}' | X: ${String.format("%.2f", data.x)} | Y: ${String.format("%.2f", data.y)} | W: ${String.format("%.2f", data.width)} | H: ${String.format("%.2f", data.height)}")
-                }
-            }
-        }
-
-        println("\n" + "=".repeat(80))
-        println("END OF PDF TEXT DATA")
-        println("=".repeat(80) + "\n")
-    }
-
-    /**
-     * Print text data with coordinates for the current page to console
-     */
-    fun printCurrentPageTextWithCoordinates() {
-        val originalPageIndex = getOriginalPageIndex(selectedPageIndex)
-        val textData = allTextDataWithCoordinates[originalPageIndex]
-
-        if (textData.isNullOrEmpty()) {
-            println("=" .repeat(60))
-            println("No text data found for page ${selectedPageIndex + 1} (original page ${originalPageIndex + 1})")
-            println("=" .repeat(60))
-            return
-        }
-
-        println("\n" + "=".repeat(60))
-        println("TEXT DATA WITH COORDINATES FOR PAGE ${selectedPageIndex + 1}")
-        println("Original Page Index: ${originalPageIndex + 1}")
-        println("Total Text Elements: ${textData.size}")
-        println("=".repeat(60))
-
-        textData.forEachIndexed { index, data ->
-            println("\n[Element ${index + 1}]")
-            println("  Text: '${data.text}'")
-            println("  X: ${String.format("%.2f", data.x)}")
-            println("  Y: ${String.format("%.2f", data.y)}")
-            println("  Width: ${String.format("%.2f", data.width)}")
-            println("  Height: ${String.format("%.2f", data.height)}")
-        }
-
-        println("\n" + "=".repeat(60))
-        println("END OF PAGE ${selectedPageIndex + 1} TEXT DATA")
-        println("=".repeat(60) + "\n")
-    }
 }

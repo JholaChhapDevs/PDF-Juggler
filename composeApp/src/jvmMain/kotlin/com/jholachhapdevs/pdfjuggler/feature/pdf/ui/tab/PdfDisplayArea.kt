@@ -35,9 +35,6 @@ fun PdfDisplayArea(
             listState.scrollToItem(idx, 0)
         }
     }
-    if(!model.isLoading){
-        println(model.tableOfContent)
-    }
     
     if (model.isLoading) {
         Box(
@@ -50,19 +47,6 @@ fun PdfDisplayArea(
         Box(
             Modifier
                 .fillMaxSize()
-                .onKeyEvent { event ->
-                    // Handle Ctrl+Shift+T to print text data with coordinates
-                    if (event.type == KeyEventType.KeyDown &&
-                        event.key == Key.T &&
-                        event.isCtrlPressed &&
-                        event.isShiftPressed
-                    ) {
-                        model.printCurrentPageTextWithCoordinates()
-                        true
-                    } else {
-                        false
-                    }
-                }
                 .focusable()
         ) {
             Column(Modifier.fillMaxSize()) {
@@ -159,18 +143,19 @@ fun PdfDisplayArea(
                     }
                     val originalPageIndex = model.getOriginalPageIndex(model.selectedPageIndex)
                     val pageSizePts = model.getPageSizePointsForDisplayIndex(model.selectedPageIndex)
+                    
+                    val textDataForPage = model.allTextDataWithCoordinates[originalPageIndex] ?: emptyList()
                    PdfMid(
                         modifier = Modifier
                             .weight(if (model.isFullscreen) 1f else 0.85f)
                             .fillMaxSize()
                             .padding(top = 24.dp), // add gap only above the PDF area
                         pageImage = model.currentPageImage,
-                        textData = model.allTextDataWithCoordinates[originalPageIndex] ?: emptyList(),
+                        textData = textDataForPage,
                         rotation = model.currentRotation,
                         isFullscreen = model.isFullscreen,
                         onTextSelected = { selectedText ->
-                            // Handle selected text
-                            println("Selected text: $selectedText")
+                            // Handle selected text (no logging)
                         },
                         onViewportChanged = { viewport ->
                             model.onViewportChanged(viewport)

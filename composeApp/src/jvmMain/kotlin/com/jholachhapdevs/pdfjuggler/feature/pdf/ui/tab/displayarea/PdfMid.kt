@@ -71,6 +71,16 @@ fun PdfMid(
     var selectedText by remember { mutableStateOf("") }
     var isSelecting by remember { mutableStateOf(false) }
     var selectedRectsNormalized by remember { mutableStateOf<List<Rect>>(emptyList()) }
+    
+    // Clear selection when switching pages (when textData changes)
+    LaunchedEffect(textData) {
+        println("DEBUG: Clearing selection state due to textData change. TextData size: ${textData.size}")
+        selectionStart = null
+        selectionEnd = null
+        selectedText = ""
+        isSelecting = false
+        selectedRectsNormalized = emptyList()
+    }
 
     // Notify parent about viewport changes
     LaunchedEffect(viewportSize) {
@@ -155,6 +165,7 @@ fun PdfMid(
 
     // Create bounding boxes for text using PDF points -> normalized to 0..1, then scaled to canvas
     val textBoundsNormalized = remember(textData, pageImage, pageSizePoints, rotation) {
+        println("DEBUG: Recalculating textBoundsNormalized. TextData size: ${textData.size}, PageImage: ${pageImage != null}, PageSizePoints: $pageSizePoints, Rotation: $rotation")
         val rot = ((rotation % 360f) + 360f) % 360f
         val rotInt = when {
             rot in 45f..135f -> 90
@@ -166,19 +177,26 @@ fun PdfMid(
         val normalized: List<Pair<Rect, TextPositionData>> = if (pageSizePoints != null) {
             val pdfW = pageSizePoints.width
             val pdfH = pageSizePoints.height
-            textData.map { t ->
+            textData.mapIndexed { index, t ->
                 // We use xDirAdj/yDirAdj from PDFBox => y increases downward from top-left origin
                 val l = (t.x / pdfW)
                 val w = (t.width / pdfW)
                 val h = (t.height / pdfH)
                 val top = ((t.y - t.height) / pdfH)
+                val left = l.coerceAtLeast(0f)
+                val top2 = top.coerceAtLeast(0f)
+                val right = (l + w).coerceAtMost(1f)
+                val bottom = (top + h).coerceAtMost(1f)
+                
                 val rect0 = Rect(
-                    left = l.coerceIn(0f, 1f),
-                    top = top.coerceIn(0f, 1f),
-                    right = (l + w).coerceIn(0f, 1f),
-                    bottom = (top + h).coerceIn(0f, 1f)
+                    left = left,
+                    top = top2,
+                    right = right,
+                    bottom = bottom
                 )
+                
                 val rectR = rotateRectNormalized(rect0.left, rect0.top, rect0.width, rect0.height, rotInt)
+                
                 rectR to t
             }
         } else {
@@ -191,16 +209,24 @@ fun PdfMid(
                     val w = (t.width / pdfW)
                     val h = (t.height / pdfH)
                     val top = ((t.y - t.height) / pdfH)
+                    val leftClamped = l.coerceAtLeast(0f)
+                    val topClamped = top.coerceAtLeast(0f)
+                    val rightClamped = (l + w).coerceAtMost(1f)
+                    val bottomClamped = (top + h).coerceAtMost(1f)
                     val rect0 = Rect(
-                        left = l.coerceIn(0f, 1f),
-                        top = top.coerceIn(0f, 1f),
-                        right = (l + w).coerceIn(0f, 1f),
-                        bottom = (top + h).coerceIn(0f, 1f)
+                        left = leftClamped,
+                        top = topClamped,
+                        right = rightClamped,
+                        bottom = bottomClamped
                     )
                     val rectR = rotateRectNormalized(rect0.left, rect0.top, rect0.width, rect0.height, rotInt)
                     rectR to t
                 }
             } ?: emptyList()
+        }
+        println("DEBUG: textBoundsNormalized calculated with ${normalized.size} text bounds")
+        if (normalized.isNotEmpty()) {
+            println("DEBUG: Sample bounds - first: ${normalized.first().first}, last: ${normalized.last().first}")
         }
         normalized
     }
@@ -452,7 +478,7 @@ fun PdfMid(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(aspectRatio)
-                                    .pointerInput("text_selection") {
+                                    .pointerInput(textBoundsNormalized) {
                                         awaitPointerEventScope {
                                             while (true) {
                                                 val event = awaitPointerEvent()
@@ -492,13 +518,21 @@ fun PdfMid(
                                                                             bottom = (maxY / height).coerceIn(0f, 1f)
                                                                         )
 
+                                                                        println("DEBUG: Selection area: $selNorm")
+                                                                        println("DEBUG: Available textBoundsNormalized: ${textBoundsNormalized.size} items")
+                                                                        if (textBoundsNormalized.isNotEmpty()) {
+                                                                            println("DEBUG: First text bound: ${textBoundsNormalized.first().first}")
+                                                                        }
+                                                                        
                                                                         val selectedPairs = textBoundsNormalized.filter { (nb, _) ->
                                                                             nb.overlaps(selNorm)
                                                                         }.sortedWith(compareBy(
                                                                             { (nb, _) -> nb.top },
                                                                             { (nb, _) -> nb.left }
                                                                         ))
-
+                                                                        
+                                                                        println("DEBUG: Selected ${selectedPairs.size} text elements")
+                                                                        
                                                                         selectedRectsNormalized = selectedPairs.map { it.first }
                                                                         selectedText = selectedPairs.joinToString("") { it.second.text }
                                                                         if (selectedText.isNotEmpty()) onTextSelected(selectedText)
@@ -524,10 +558,10 @@ fun PdfMid(
                                             }
                                         }
                                     }
-                            )
-                        }
-                    }
-                }
+                                        )
+                                    }
+                                }
+                            }
             } else {
                 JText(
                     text = "No page to display",
