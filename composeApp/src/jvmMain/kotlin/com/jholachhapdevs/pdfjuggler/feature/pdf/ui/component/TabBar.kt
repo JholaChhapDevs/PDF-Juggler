@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -121,11 +120,99 @@ fun TabBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Left side: App-level features
+                    // Left spacer
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Center: Zoom and Rotation controls
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Zoom Out
+                        IconButton(
+                            onClick = onZoomOut,
+                            enabled = zoomFactor > minZoom + 1e-4f
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.ZoomOut,
+                                contentDescription = "Zoom Out",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        // Zoom percentage display
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            JText(
+                                text = "${(zoomFactor * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        // Zoom In
+                        IconButton(onClick = onZoomIn) {
+                            Icon(
+                                imageVector = Icons.Filled.ZoomIn,
+                                contentDescription = "Zoom In",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        // Reset Zoom
+                        IconButton(onClick = onResetZoom) {
+                            Icon(
+                                imageVector = Icons.Outlined.RestartAlt,
+                                contentDescription = "Reset Zoom",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        // Divider
+                        VerticalDivider(
+                            modifier = Modifier
+                                .height(24.dp)
+                                .padding(horizontal = 4.dp)
+                        )
+
+                        // Rotate Left
+                        IconButton(onClick = onRotateCounterClockwise) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.RotateLeft,
+                                contentDescription = "Rotate Left",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        // Rotate Right
+                        IconButton(onClick = onRotateClockwise) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.RotateRight,
+                                contentDescription = "Rotate Right",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Right spacer
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Right side: Print, AI, Split View, Search, Fullscreen
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Print
+                        IconButton(onClick = onPrint) {
+                            Icon(
+                                imageVector = Icons.Outlined.Print,
+                                contentDescription = "Print",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
                         // AI Chat toggle
                         IconButton(onClick = onToggleAiChat) {
                             Icon(
@@ -156,88 +243,7 @@ fun TabBar(
                             )
                         }
 
-                        // Print
-                        IconButton(onClick = onPrint) {
-                            Icon(
-                                imageVector = Icons.Outlined.Print,
-                                contentDescription = "Print",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        VerticalDivider(
-                            modifier = Modifier
-                                .height(24.dp)
-                                .padding(horizontal = 4.dp)
-                        )
-
-                        // Rotation controls
-                        IconButton(onClick = onRotateCounterClockwise) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.RotateLeft,
-                                contentDescription = "Rotate Left",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        IconButton(onClick = onRotateClockwise) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.RotateRight,
-                                contentDescription = "Rotate Right",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    // Center: Zoom controls
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(
-                            onClick = onZoomOut,
-                            enabled = zoomFactor > minZoom + 1e-4f
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.ZoomOut,
-                                contentDescription = "Zoom Out",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface,
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
-                            JText(
-                                text = "${(zoomFactor * 100).toInt()}%",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-
-                        IconButton(onClick = onZoomIn) {
-                            Icon(
-                                imageVector = Icons.Filled.ZoomIn,
-                                contentDescription = "Zoom In",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        IconButton(onClick = onResetZoom) {
-                            Icon(
-                                imageVector = Icons.Outlined.RestartAlt,
-                                contentDescription = "Reset Zoom",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    // Right side: Search and Fullscreen
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                        // Search
                         IconButton(onClick = onSearchClick) {
                             Icon(
                                 imageVector = Icons.Filled.Search,
@@ -246,6 +252,14 @@ fun TabBar(
                             )
                         }
 
+                        // Divider
+                        VerticalDivider(
+                            modifier = Modifier
+                                .height(24.dp)
+                                .padding(horizontal = 4.dp)
+                        )
+
+                        // Fullscreen toggle
                         IconButton(onClick = onToggleFullscreen) {
                             Icon(
                                 imageVector = if (isFullscreen)
