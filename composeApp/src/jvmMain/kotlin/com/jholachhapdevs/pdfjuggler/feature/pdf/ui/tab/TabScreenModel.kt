@@ -90,7 +90,6 @@ class TabScreenModel(
         private set
         
     // Current zoom and viewport state for adaptive rendering
-    private var currentZoom by mutableStateOf(1f)
     private var currentViewport by mutableStateOf(IntSize.Zero)
     
     // Auto-scroll trigger for search matches
@@ -149,6 +148,43 @@ class TabScreenModel(
         if (text.isNotBlank()) pendingAiRequest = AiRequest(text, AiRequestMode.Translate)
     }
     fun clearPendingAiRequest() { pendingAiRequest = null }
+    // Add this property near the top with other state variables
+    var currentZoom by mutableStateOf(1f)
+        private set
+
+    // Add these three methods anywhere in the class
+    fun zoomIn() {
+        currentZoom = (currentZoom * 1.25f).coerceAtMost(5f)
+        screenModelScope.launch {
+            try {
+                currentPageImage = renderPageHighQuality(selectedPageIndex)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun zoomOut() {
+        currentZoom = (currentZoom / 1.25f).coerceAtLeast(0.25f)
+        screenModelScope.launch {
+            try {
+                currentPageImage = renderPageHighQuality(selectedPageIndex)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun resetZoom() {
+        currentZoom = 1f
+        screenModelScope.launch {
+            try {
+                currentPageImage = renderPageHighQuality(selectedPageIndex)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     init {
         loadPdf()
