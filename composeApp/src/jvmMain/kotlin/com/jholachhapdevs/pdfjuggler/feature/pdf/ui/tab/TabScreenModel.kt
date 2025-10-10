@@ -33,6 +33,15 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.imageio.ImageIO
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Rect
+import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.HighlightMark
+import org.apache.pdfbox.pdmodel.PDPage
+import org.apache.pdfbox.pdmodel.common.PDRectangle
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup
+import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB
+import org.apache.pdfbox.pdmodel.graphics.color.PDColor
+import kotlin.math.abs
+import kotlin.math.max
 
 class TabScreenModel(
     val pdfFile: PdfFile,
@@ -116,6 +125,12 @@ class TabScreenModel(
     var hasUnsavedBookmarks by mutableStateOf(false)
         private set
 
+    // Highlights state: original page index -> list of marks (rects normalized to unrotated page)
+    var highlightsByPage by mutableStateOf<Map<Int, List<HighlightMark>>>(emptyMap())
+        private set
+    var hasUnsavedHighlights by mutableStateOf(false)
+        private set
+
     // Map of page index -> page size in PDF points (mediaBox width/height)
     var pageSizesPoints by mutableStateOf<Map<Int, Size>>(emptyMap())
         private set
@@ -157,6 +172,19 @@ class TabScreenModel(
             }
         }
     }
+    // Pending AI chat request from selection (dictionary/translate)
+    enum class AiRequestMode { Dictionary, Translate }
+    data class AiRequest(val text: String, val mode: AiRequestMode, val ts: Long = System.currentTimeMillis())
+    var pendingAiRequest by mutableStateOf<AiRequest?>(null)
+        private set
+
+    fun requestAiDictionary(text: String) {
+        if (text.isNotBlank()) pendingAiRequest = AiRequest(text, AiRequestMode.Dictionary)
+    }
+    fun requestAiTranslate(text: String) {
+        if (text.isNotBlank()) pendingAiRequest = AiRequest(text, AiRequestMode.Translate)
+    }
+    fun clearPendingAiRequest() { pendingAiRequest = null }
 
     init {
         loadPdf()
@@ -1082,4 +1110,258 @@ class TabScreenModel(
         )
     }
 
+    /** Add a highlight for the currently displayed page.
+     * rects are normalized rectangles in the displayed orientation. We convert them back to
+     * unrotated page coordinates before storing.
+     */
+    fun addHighlightForDisplayedPage(displayedRects: List<Rect>, colorArgb: Long, pageRotation: Float) {
+        val original = getOriginalPageIndex(selectedPageIndex)
+        val rotInt = when (val rot = ((pageRotation % 360f) + 360f) % 360f) {
+            in 45f..135f -> 90
+            in 135f..225f -> 180
+            in 225f..315f -> 270
+            else -> 0
+        }
+        val unrotatedRects = displayedRects.map { inverseRotateRectNormalized(it.left, it.top, it.width, it.height, rotInt) }
+        val list = highlightsByPage[original]?.toMutableList() ?: mutableListOf()
+        list.add(HighlightMark(unrotatedRects, colorArgb))
+        highlightsByPage = highlightsByPage.toMutableMap().apply { put(original, list) }
+        hasUnsavedHighlights = true
+    }
+
+    /** Return highlights for the currently displayed page in unrotated normalized coordinates. */
+    fun getHighlightsForDisplayedPage(): List<HighlightMark> {
+        val original = getOriginalPageIndex(selectedPageIndex)
+        return highlightsByPage[original] ?: emptyList()
+    }
+
+    private fun inverseRotateRectNormalized(l: Float, t: Float, w: Float, h: Float, angle: Int): Rect {
+        // inverse of PdfMid.rotateRectNormalized
+        return when ((angle % 360 + 360) % 360) {
+            90 -> {
+                // original rect that when rotated 90 produced current rect
+                val nl = t
+                val nt = 1f - (l + w)
+                Rect(nl, nt, nl + h, nt + w)
+            }
+            180 -> {
+                val nl = 1f - (l + w)
+                val nt = 1f - (t + h)
+                Rect(nl, nt, nl + w, nt + h)
+            }
+            270 -> {
+                val nl = 1f - (t + h)
+                val nt = l
+                Rect(nl, nt, nl + h, nt + w)
+            }
+            else -> Rect(l, t, l + w, t + h)
+        }
+    }
+
+    // Merge adjacent rectangles that lie on the same line (in normalized unrotated coordinates)
+    private fun mergeRectsOnLinesNormalized(rects: List<Rect>): List<Rect> {
+        if (rects.isEmpty()) return emptyList()
+        val sorted = rects.sortedWith(compareBy({ it.top }, { it.left }))
+        val merged = mutableListOf<Rect>()
+        val heights = sorted.map { it.height }.sorted()
+        val medianH = heights[heights.size / 2]
+        val lineTol = medianH * 0.7f
+        val gapTol = medianH * 1.0f
+        var currentLineTop = sorted.first().top
+        val currentLine = mutableListOf<Rect>()
+        fun flush() {
+            if (currentLine.isEmpty()) return
+            currentLine.sortBy { it.left }
+            var acc = currentLine.first()
+            for (i in 1 until currentLine.size) {
+                val r = currentLine[i]
+                val sameRow = abs(r.top - acc.top) <= lineTol
+                val close = r.left - acc.right <= gapTol
+                if (sameRow && close) {
+                    acc = Rect(
+                        left = acc.left,
+                        top = minOf(acc.top, r.top),
+                        right = maxOf(acc.right, r.right),
+                        bottom = maxOf(acc.bottom, r.bottom)
+                    )
+                } else {
+                    merged.add(acc)
+                    acc = r
+                }
+            }
+            merged.add(acc)
+            currentLine.clear()
+        }
+        for (r in sorted) {
+            if (abs(r.top - currentLineTop) <= lineTol) currentLine.add(r) else {
+                flush()
+                currentLine.add(r)
+                currentLineTop = r.top
+            }
+        }
+        flush()
+        return merged
+    }
+
+    /**
+     * Save all current changes (page order, bookmarks metadata, highlights) to a new file
+     */
+    fun saveChangesAs(outputPath: String) {
+        if (isSaving) return
+        screenModelScope.launch {
+            isSaving = true
+            saveResult = null
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    saveCombined(pdfFile.path, outputPath)
+                }
+                saveResult = result
+                if (result is SaveResult.Success) {
+                    hasPageChanges = false
+                    hasUnsavedBookmarks = false
+                    hasUnsavedHighlights = false
+                }
+            } catch (e: Exception) {
+                saveResult = SaveResult.Error("Save failed: ${e.message}")
+                e.printStackTrace()
+            } finally {
+                isSaving = false
+            }
+        }
+    }
+
+    /**
+     * Save all current changes (page order, bookmarks metadata, highlights) over the original file
+     */
+    fun saveChanges() {
+        val tempOutputPath = "${pdfFile.path}.tmp"
+        screenModelScope.launch {
+            isSaving = true
+            saveResult = null
+            try {
+                val result = withContext(Dispatchers.IO) { saveCombined(pdfFile.path, tempOutputPath) }
+                if (result is SaveResult.Success) {
+                    val originalFile = File(pdfFile.path)
+                    val tempFile = File(tempOutputPath)
+                    if (tempFile.exists()) {
+                        val backupPath = "${pdfFile.path}.backup"
+                        val backupFile = File(backupPath)
+                        if (backupFile.exists()) backupFile.delete()
+                        originalFile.renameTo(backupFile)
+                        if (tempFile.renameTo(originalFile)) {
+                            backupFile.delete()
+                            saveResult = SaveResult.Success(pdfFile.path, pageOrder.size)
+                            hasPageChanges = false
+                            hasUnsavedBookmarks = false
+                            hasUnsavedHighlights = false
+                        } else {
+                            backupFile.renameTo(originalFile)
+                            saveResult = SaveResult.Error("Failed to replace original file")
+                        }
+                    } else {
+                        saveResult = SaveResult.Error("Temporary file was not created")
+                    }
+                } else {
+                    saveResult = result
+                }
+            } catch (e: Exception) {
+                saveResult = SaveResult.Error("Save failed: ${e.message}")
+                e.printStackTrace()
+            } finally {
+                File(tempOutputPath).delete()
+                isSaving = false
+            }
+        }
+    }
+
+    private fun saveCombined(inputPath: String, outputPath: String): SaveResult {
+        return try {
+            val inputFile = File(inputPath)
+            val outputFile = File(outputPath)
+            if (!inputFile.exists()) return SaveResult.Error("Input file does not exist: $inputPath")
+            outputFile.parentFile?.mkdirs()
+            PDDocument.load(inputFile).use { inputDoc ->
+                PDDocument().use { outputDoc ->
+                    // Copy pages in reordered order and apply highlights for each original page
+                    val maxPage = inputDoc.numberOfPages - 1
+                    val invalid = pageOrder.filter { it < 0 || it > maxPage }
+                    if (invalid.isNotEmpty()) return SaveResult.Error("Invalid page indices: $invalid")
+                    pageOrder.forEach { originalIndex ->
+                        val sourcePage = inputDoc.getPage(originalIndex)
+                        val imported = outputDoc.importPage(sourcePage)
+                        if (outputDoc.pages.indexOf(imported) == -1) outputDoc.addPage(imported)
+                        // Apply highlights that belong to this original page onto the imported page
+                        val marks = highlightsByPage[originalIndex] ?: emptyList()
+                        if (marks.isNotEmpty()) applyHighlightsToPage(imported, marks)
+                    }
+                    // Copy document-level metadata
+                    copyDocumentMetadata(inputDoc, outputDoc)
+                    // Also persist bookmarks metadata
+                    val info = outputDoc.documentInformation ?: PDDocumentInformation().also { outputDoc.documentInformation = it }
+                    info.setCustomMetadataValue("Bookmarks", serializeBookmarks(bookmarks))
+                    outputDoc.save(outputFile)
+                }
+            }
+            SaveResult.Success(outputPath, pageOrder.size)
+        } catch (e: Exception) {
+            SaveResult.Error("Unexpected error: ${e.message}")
+        }
+    }
+
+    private fun applyHighlightsToPage(page: PDPage, marks: List<HighlightMark>) {
+        val mediaBox: PDRectangle = page.mediaBox
+        val pageW = mediaBox.width
+        val pageH = mediaBox.height
+        val annotations = page.annotations
+        marks.forEach { mark ->
+            // Merge rects per line to reduce fragmentation
+            val mergedRects = mergeRectsOnLinesNormalized(mark.rects)
+            mergedRects.forEach { r ->
+                val left = r.left * pageW
+                val top = r.top * pageH
+                val width = r.width * pageW
+                val height = r.height * pageH
+                val lly = pageH - (top + height) // convert from top-left origin to PDF bottom-left
+                val rect = PDRectangle(left, lly, width, height)
+                val ann = PDAnnotationTextMarkup(PDAnnotationTextMarkup.SUB_TYPE_HIGHLIGHT)
+                ann.rectangle = rect
+                // Quad points: x1,y1 x2,y2 x3,y3 x4,y4 (top-left, top-right, bottom-left, bottom-right)
+                val x1 = left; val y1 = lly + height
+                val x2 = left + width; val y2 = lly + height
+                val x3 = left; val y3 = lly
+                val x4 = left + width; val y4 = lly
+                ann.quadPoints = floatArrayOf(x1, y1, x2, y2, x3, y3, x4, y4)
+                // Set color (RGB only)
+                val rA = ((mark.colorArgb shr 16) and 0xFF) / 255f
+                val gA = ((mark.colorArgb shr 8) and 0xFF) / 255f
+                val bA = (mark.colorArgb and 0xFF) / 255f
+                ann.color = PDColor(floatArrayOf(rA, gA, bA), PDDeviceRGB.INSTANCE)
+                annotations.add(ann)
+            }
+        }
+    }
+
+    private fun copyDocumentMetadata(source: PDDocument, destination: PDDocument) {
+        try {
+            val sourceInfo = source.documentInformation
+            if (sourceInfo != null) {
+                val destInfo = destination.documentInformation ?: run {
+                    val newInfo = PDDocumentInformation()
+                    destination.documentInformation = newInfo
+                    newInfo
+                }
+                destInfo.title = sourceInfo.title
+                destInfo.author = sourceInfo.author
+                destInfo.subject = sourceInfo.subject
+                destInfo.creator = sourceInfo.creator
+                destInfo.producer = sourceInfo.producer
+                destInfo.keywords = sourceInfo.keywords
+                destInfo.creationDate = sourceInfo.creationDate
+                destInfo.modificationDate = java.util.Calendar.getInstance()
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    // ...existing code...
 }

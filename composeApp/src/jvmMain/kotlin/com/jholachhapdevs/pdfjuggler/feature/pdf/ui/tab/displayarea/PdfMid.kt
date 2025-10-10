@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.*
@@ -27,15 +28,16 @@ import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.*
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TextPositionData
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
+import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.HighlightMark
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -60,10 +62,20 @@ fun PdfMid(
     onZoomIn: () -> Unit = {},
     onZoomOut: () -> Unit = {},
     onResetZoom: () -> Unit = {}
+    // Page index for cache invalidation
+    pageIndex: Int = 0,
+    // New: persisted highlights for this page (normalized, unrotated)
+    pageHighlights: List<HighlightMark> = emptyList(),
+    // New: callback when user chooses Highlight from context menu
+    onAddHighlight: (rectsNormalized: List<Rect>, colorArgb: Long) -> Unit = { _, _ -> },
+    // New: AI actions
+    onDictionaryRequest: (text: String) -> Unit = {},
+    onTranslateRequest: (text: String) -> Unit = {}
 ) {
     val cs = MaterialTheme.colorScheme
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
+    val density = LocalDensity.current
 
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
 
@@ -74,6 +86,10 @@ fun PdfMid(
     var isSelecting by remember { mutableStateOf(false) }
     var selectedRectsNormalized by remember { mutableStateOf<List<Rect>>(emptyList()) }
 
+    // Context menu state
+    var ctxMenuOpen by remember { mutableStateOf(false) }
+    var ctxMenuPos by remember { mutableStateOf(Offset.Zero) }
+
     // Clear selection when switching pages (when textData changes)
     LaunchedEffect(textData) {
         selectionStart = null
@@ -81,6 +97,7 @@ fun PdfMid(
         selectedText = ""
         isSelecting = false
         selectedRectsNormalized = emptyList()
+        ctxMenuOpen = false
     }
 
     // Notify parent about viewport changes
@@ -116,8 +133,8 @@ fun PdfMid(
 
         val heights = sorted.map { it.height }.sorted()
         val medianH = heights[heights.size / 2]
-        val lineTol = medianH * 0.6f
-        val gapTol = medianH * 0.8f
+        val lineTol = medianH * 0.7f // a bit more tolerant vertically
+        val gapTol = medianH * 1.0f // wider gap tolerance to better connect fragments
 
         var currentLine = mutableListOf<Rect>()
         var currentLineTop = sorted.first().top
@@ -407,6 +424,7 @@ fun PdfMid(
                                 contentScale = ContentScale.FillWidth
                             )
 
+                            // Text/Highlight Layer - Canvas
                             Canvas(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -415,7 +433,30 @@ fun PdfMid(
                                 val canvasWidth = size.width
                                 val canvasHeight = size.height
 
-                                // Draw search highlights
+                                // Slightly rounder corners for a smoother band
+                                val corner = 6.dp.toPx()
+
+                                // Expand each highlight band more, with sensible minimum padding
+                                fun drawRoundedRectNorm(rect: Rect, color: androidx.compose.ui.graphics.Color) {
+                                    val bandHeightPx = rect.height * canvasHeight
+                                    val minVPad = 1.5.dp.toPx()
+                                    val minHPad = 1.0.dp.toPx()
+                                    // ~22% vertical padding each side; ~10% horizontal padding each side
+                                    val vPad = kotlin.math.max(bandHeightPx * 0.22f, minVPad)
+                                    val hPad = kotlin.math.max(bandHeightPx * 0.10f, minHPad)
+                                    val left = rect.left * canvasWidth - hPad
+                                    val top = rect.top * canvasHeight - vPad
+                                    val rectWidth = rect.width * canvasWidth + 2 * hPad
+                                    val rectHeight = bandHeightPx + 2 * vPad
+                                    drawRoundRect(
+                                        color = color,
+                                        topLeft = Offset(left, top),
+                                        size = Size(rectWidth, rectHeight),
+                                        cornerRadius = CornerRadius(corner, corner)
+                                    )
+                                }
+
+                                // First: draw search match highlight rectangles in cyan
                                 if (searchHighlightPositions.isNotEmpty()) {
                                     val posSet = searchHighlightPositions.toSet()
                                     val matchRects = textBoundsNormalized.filter { (_, tp) ->
@@ -423,33 +464,46 @@ fun PdfMid(
                                     }.map { it.first }
                                     val mergedMatch = mergeRectsOnLines(matchRects)
                                     mergedMatch.forEach { nb ->
-                                        val left = nb.left * canvasWidth
-                                        val top = nb.top * canvasHeight
-                                        val rectWidth = nb.width * canvasWidth
-                                        val rectHeight = nb.height * canvasHeight
-                                        drawRect(
-                                            color = androidx.compose.ui.graphics.Color(0xFF00BCD4).copy(alpha = 0.35f),
-                                            topLeft = Offset(left, top),
-                                            size = Size(rectWidth, rectHeight)
+                                        drawRoundedRectNorm(
+                                            nb,
+                                            androidx.compose.ui.graphics.Color(0xFF00BCD4).copy(alpha = 0.35f)
                                         )
                                     }
                                 }
 
-                                // Draw text selection highlights
+                                // Persisted page highlights (different colors)
+                                if (pageHighlights.isNotEmpty()) {
+                                    val rot = ((rotation % 360f) + 360f) % 360f
+                                    val rotInt = when {
+                                        rot in 45f..135f -> 90
+                                        rot in 135f..225f -> 180
+                                        rot in 225f..315f -> 270
+                                        else -> 0
+                                    }
+                                    pageHighlights.forEach { mark ->
+                                        val rotated = mark.rects.map { ur ->
+                                            rotateRectNormalized(ur.left, ur.top, ur.width, ur.height, rotInt)
+                                        }
+                                        val merged = mergeRectsOnLines(rotated)
+                                        val colorInt = (mark.colorArgb and 0xFFFFFFFF).toInt()
+                                        val color = androidx.compose.ui.graphics.Color(colorInt).copy(alpha = 0.35f)
+                                        merged.forEach { nb ->
+                                            drawRoundedRectNorm(nb, color)
+                                        }
+                                    }
+                                }
+
+                                // Then: draw selected text highlight rectangles in yellow
                                 val toDraw = mergeRectsOnLines(selectedRectsNormalized)
                                 toDraw.forEach { nb ->
-                                    val left = nb.left * canvasWidth
-                                    val top = nb.top * canvasHeight
-                                    val rectWidth = nb.width * canvasWidth
-                                    val rectHeight = nb.height * canvasHeight
-                                    drawRect(
-                                        color = androidx.compose.ui.graphics.Color(0xFFFFEB3B).copy(alpha = 0.45f),
-                                        topLeft = Offset(left, top),
-                                        size = Size(rectWidth, rectHeight)
+                                    drawRoundedRectNorm(
+                                        nb,
+                                        androidx.compose.ui.graphics.Color(0xFFFFEB3B).copy(alpha = 0.45f)
                                     )
                                 }
                             }
 
+                            // Pointer input for text selection and right-click context menu
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -462,6 +516,16 @@ fun PdfMid(
                                                 when (event.type) {
                                                     PointerEventType.Press -> {
                                                         val position = event.changes.first().position
+                                                        // Right click -> open context menu if selection exists
+                                                        if (event.buttons.isSecondaryPressed) {
+                                                            if (selectedRectsNormalized.isNotEmpty()) {
+                                                                ctxMenuPos = position
+                                                                ctxMenuOpen = true
+                                                                event.changes.forEach { it.consume() }
+                                                                continue
+                                                            }
+                                                        }
+                                                        // Left click -> begin selection
                                                         selectionStart = position
                                                         selectionEnd = position
                                                         isSelecting = true
@@ -524,6 +588,82 @@ fun PdfMid(
                                         }
                                     }
                             )
+
+                            // Context menu for highlighting
+                            val menuOffset = run {
+                                val densityVal = density.density
+                                DpOffset((ctxMenuPos.x / densityVal).dp, (ctxMenuPos.y / densityVal).dp)
+                            }
+                            DropdownMenu(
+                                expanded = ctxMenuOpen,
+                                onDismissRequest = { ctxMenuOpen = false },
+                                offset = menuOffset
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Highlight - Yellow") },
+                                    onClick = {
+                                        onAddHighlight(selectedRectsNormalized, 0xFFFFEB3BL)
+                                        ctxMenuOpen = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Highlight - Green") },
+                                    onClick = {
+                                        onAddHighlight(selectedRectsNormalized, 0xFF8BC34AL)
+                                        ctxMenuOpen = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Highlight - Pink") },
+                                    onClick = {
+                                        onAddHighlight(selectedRectsNormalized, 0xFFE91E63L)
+                                        ctxMenuOpen = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Highlight - Blue") },
+                                    onClick = {
+                                        onAddHighlight(selectedRectsNormalized, 0xFF2196F3L)
+                                        ctxMenuOpen = false
+                                    }
+                                )
+                                HorizontalDivider()
+                                // New combined AI option
+                                DropdownMenuItem(
+                                    text = { Text("Dictionary & Translate (AI)") },
+                                    onClick = {
+                                        val textSel = selectedText.trim()
+                                        if (textSel.isNotEmpty()) {
+                                            clipboardManager.setText(AnnotatedString(textSel))
+                                            // Use dictionary request to trigger the combined flow
+                                            onDictionaryRequest(textSel)
+                                        }
+                                        ctxMenuOpen = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Dictionary (AI)") },
+                                    onClick = {
+                                        val textSel = selectedText.trim()
+                                        if (textSel.isNotEmpty()) {
+                                            clipboardManager.setText(AnnotatedString(textSel))
+                                            onDictionaryRequest(textSel)
+                                        }
+                                        ctxMenuOpen = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Translate (AI)") },
+                                    onClick = {
+                                        val textSel = selectedText.trim()
+                                        if (textSel.isNotEmpty()) {
+                                            clipboardManager.setText(AnnotatedString(textSel))
+                                            onTranslateRequest(textSel)
+                                        }
+                                        ctxMenuOpen = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }

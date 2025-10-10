@@ -2,6 +2,7 @@ package com.jholachhapdevs.pdfjuggler.feature.ai.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.PdfDisplayArea
@@ -13,6 +14,20 @@ fun AiChatPdfComponent(
     aiScreenModel: AiScreenModel,
     modifier: Modifier = Modifier
 ) {
+    // If there's a pending AI request (dictionary/translate), seed and send it
+    val req = tabScreenModel.pendingAiRequest
+    LaunchedEffect(req) {
+        req?.let { r ->
+            val text = r.text.trim()
+            if (text.isNotEmpty()) {
+                val base = "You are a helpful assistant for reading PDFs. First, provide a brief dictionary-style meaning/definition and part of speech for: \"$text\". Then ask the user: 'Into which language should I translate this?'. Do not translate until the user specifies the language. Keep it concise."
+                aiScreenModel.updateInput(base)
+                aiScreenModel.send()
+            }
+            tabScreenModel.clearPendingAiRequest()
+        }
+    }
+
     Row(
         modifier = modifier.fillMaxSize()
     ) {
