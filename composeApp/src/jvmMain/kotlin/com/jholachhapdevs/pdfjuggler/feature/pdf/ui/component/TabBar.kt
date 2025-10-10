@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.material.icons.filled.ViewDay
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,7 +31,9 @@ fun TabBar(
     onClose: (Tab) -> Unit,
     onPrint: () -> Unit,
     isSplitViewEnabled: Boolean = false,
-    onToggleSplitView: () -> Unit = {}
+    onToggleSplitView: () -> Unit = {},
+    isAiChatEnabled: Boolean = false,
+    onToggleAiChat: () -> Unit = {}
 ) {
     val navigator = LocalTabNavigator.current
     Surface(tonalElevation = 2.dp) {
@@ -54,6 +57,17 @@ fun TabBar(
                         selected = selected,
                         onClick = { onSelect(tab) },
                         onClose = { onClose(tab) }
+                    )
+                }
+            }
+
+            // AI chat toggle button
+            if (tabs.size >= 1) {
+                IconButton(onClick = onToggleAiChat) {
+                    Icon(
+                        imageVector = Icons.Outlined.SmartToy,
+                        contentDescription = if (isAiChatEnabled) "Hide AI chat" else "Show AI chat",
+                        tint = if (isAiChatEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     )
                 }
             }

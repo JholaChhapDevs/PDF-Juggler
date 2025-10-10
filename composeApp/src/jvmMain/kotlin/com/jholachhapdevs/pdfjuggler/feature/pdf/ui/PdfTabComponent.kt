@@ -17,10 +17,12 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.CurrentTab
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabNavigator
+import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiChatPdfComponent
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.AdvancedPrintOptionsDialog
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.PrintProgressDialog
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.TabBar
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SplitViewComponent
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.TabScreenModel
 import com.jholachhapdevs.pdfjuggler.service.PdfGenerationService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -66,7 +68,9 @@ fun PdfTabComponent(
                     onClose = { tab -> model.closeTab(tab) },
                     onPrint = { showPrintOptionsDialog = true },
                     isSplitViewEnabled = model.isSplitViewEnabled,
-                    onToggleSplitView = { model.toggleSplitView() }
+                    onToggleSplitView = { model.toggleSplitView() },
+                    isAiChatEnabled = model.isAiChatEnabled,
+                    onToggleAiChat = { model.toggleAiChat() }
                 )
             }
         ) { padding ->
@@ -84,6 +88,14 @@ fun PdfTabComponent(
                         onLeftTabChange = { tab -> model.setSplitViewLeft(tab) },
                         onRightTabChange = { tab -> model.setSplitViewRight(tab) }
                     )
+                } else if (model.isAiChatEnabled) {
+                    // AI chat mode - show PDF with AI chat panel
+                    val currentTabModel = model.getCurrentTabModel()
+                    if (currentTabModel != null) {
+                        AiChatPdfComponent(tabScreenModel = currentTabModel)
+                    } else {
+                        CurrentTab()
+                    }
                 } else {
                     // Normal single view mode
                     CurrentTab()
