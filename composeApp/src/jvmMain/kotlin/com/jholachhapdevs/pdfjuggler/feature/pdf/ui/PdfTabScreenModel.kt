@@ -127,4 +127,9 @@ class PdfTabScreenModel(
     fun getTabModel(tab: Tab?): TabScreenModel? {
         return (tab as? PdfTab)?.pdfFile?.let { getOrCreateModel(it) }
     }
+
+    fun getCurrentTabModel(): TabScreenModel? {
+        val currentPdfTab = current as? PdfTab ?: return null
+        return contentCache[currentPdfTab.pdfFile.path]
+    }
 }
