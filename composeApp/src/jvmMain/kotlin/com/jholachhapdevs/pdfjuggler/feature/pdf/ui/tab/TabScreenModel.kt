@@ -14,11 +14,13 @@ import com.jholachhapdevs.pdfjuggler.core.pdf.SaveResult
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TableOfContentData
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.PdfFile
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TextPositionData
+import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.BookmarkData
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.PositionAwareTextStripper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.apache.pdfbox.pdmodel.PDDocument
+import org.apache.pdfbox.pdmodel.PDDocumentInformation
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageXYZDestination
@@ -108,6 +110,13 @@ class TabScreenModel(
     var saveResult by mutableStateOf<SaveResult?>(null)
         private set
 
+    // Bookmarks state
+    var bookmarks by mutableStateOf<List<BookmarkData>>(emptyList())
+        private set
+
+    var hasUnsavedBookmarks by mutableStateOf(false)
+        private set
+
     // Map of page index -> page size in PDF points (mediaBox width/height)
     var pageSizesPoints by mutableStateOf<Map<Int, Size>>(emptyMap())
         private set
@@ -128,6 +137,8 @@ class TabScreenModel(
                 allTextDataWithCoordinates = extractAllTextData(pdfFile.path)
                 allTextData = getTextOnlyData()
                 tableOfContent = getTableOfContents(pdfFile.path)
+                // Load bookmarks from PDF metadata
+                bookmarks = loadBookmarksFromMetadata(pdfFile.path)
                 // Extract page sizes in points for proper coordinate mapping
                 pageSizesPoints = extractPageSizesPoints(pdfFile.path)
 
@@ -159,6 +170,264 @@ class TabScreenModel(
             }
         }
     }
+
+    // ============ Bookmark Management Functions ============
+
+    /**
+     * Add a new bookmark
+     */
+    fun addBookmark(bookmark: BookmarkData) {
+        // Check if bookmark already exists for this page
+        val existingIndex = bookmarks.indexOfFirst { it.pageIndex == bookmark.pageIndex }
+
+        if (existingIndex != -1) {
+            // Update existing bookmark
+            val updatedBookmarks = bookmarks.toMutableList()
+            updatedBookmarks[existingIndex] = bookmark
+            bookmarks = updatedBookmarks
+        } else {
+            // Add new bookmark
+            bookmarks = bookmarks + bookmark
+        }
+
+        hasUnsavedBookmarks = true
+    }
+
+    /**
+     * Remove a bookmark by index in the bookmarks list
+     */
+    fun removeBookmark(bookmarkIndex: Int) {
+        if (bookmarkIndex >= 0 && bookmarkIndex < bookmarks.size) {
+            bookmarks = bookmarks.toMutableList().apply {
+                removeAt(bookmarkIndex)
+            }
+            hasUnsavedBookmarks = true
+        }
+    }
+
+    /**
+     * Remove bookmark for a specific page
+     */
+    fun removeBookmarkForPage(pageIndex: Int) {
+        bookmarks = bookmarks.filter { it.pageIndex != pageIndex }
+        hasUnsavedBookmarks = true
+    }
+
+    /**
+     * Check if a page has a bookmark
+     */
+    fun isPageBookmarked(pageIndex: Int): Boolean {
+        return bookmarks.any { it.pageIndex == pageIndex }
+    }
+
+    /**
+     * Get bookmark for a specific page
+     */
+    fun getBookmarkForPage(pageIndex: Int): BookmarkData? {
+        return bookmarks.firstOrNull { it.pageIndex == pageIndex }
+    }
+
+    /**
+     * Save bookmarks to PDF metadata
+     */
+    fun saveBookmarksToMetadata() {
+        screenModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val file = File(pdfFile.path)
+
+                    // Create a temporary file to save to first
+                    val tempFile = File("${file.absolutePath}.tmp")
+
+                    PDDocument.load(file).use { document ->
+                        // Get or create document information
+                        val info = document.documentInformation ?: PDDocumentInformation()
+
+                        // Serialize ALL bookmarks to a custom metadata field
+                        val bookmarksJson = serializeBookmarks(bookmarks)
+
+                        // Debug: Print what we're saving
+                        println("Saving ${bookmarks.size} bookmarks to metadata: $bookmarksJson")
+
+                        info.setCustomMetadataValue("Bookmarks", bookmarksJson)
+
+                        // Update document information
+                        document.documentInformation = info
+
+                        // Save to temporary file first
+                        document.save(tempFile)
+                    }
+
+                    // Replace original file with temp file
+                    if (tempFile.exists()) {
+                        file.delete()
+                        tempFile.renameTo(file)
+                    }
+                }
+
+                hasUnsavedBookmarks = false
+                saveResult = SaveResult.Success(pdfFile.path, bookmarks.size, "${bookmarks.size} bookmark(s) saved successfully")
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                saveResult = SaveResult.Error("Failed to save bookmarks: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Load bookmarks from PDF metadata
+     */
+    private suspend fun loadBookmarksFromMetadata(filePath: String): List<BookmarkData> {
+        return withContext(Dispatchers.IO) {
+            try {
+                PDDocument.load(File(filePath)).use { document ->
+                    val info = document.documentInformation
+                    val bookmarksJson = info?.getCustomMetadataValue("Bookmarks")
+
+                    println("Loading bookmarks from metadata: $bookmarksJson")
+
+                    if (bookmarksJson != null) {
+                        val loadedBookmarks = deserializeBookmarks(bookmarksJson)
+                        println("Loaded ${loadedBookmarks.size} bookmarks")
+                        loadedBookmarks
+                    } else {
+                        println("No bookmarks found in metadata")
+                        emptyList()
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                emptyList()
+            }
+        }
+    }
+
+    /**
+     * Serialize bookmarks to JSON string
+     */
+    private fun serializeBookmarks(bookmarks: List<BookmarkData>): String {
+        // Simple JSON serialization (you can use a proper JSON library like kotlinx.serialization)
+        val bookmarksArray = bookmarks.joinToString(",") { bookmark ->
+            """{"pageIndex":${bookmark.pageIndex},"title":"${escapeJson(bookmark.title)}","note":"${escapeJson(bookmark.note)}"}"""
+        }
+        return "[$bookmarksArray]"
+    }
+
+    /**
+     * Deserialize bookmarks from JSON string
+     */
+    private fun deserializeBookmarks(json: String): List<BookmarkData> {
+        try {
+            val bookmarks = mutableListOf<BookmarkData>()
+
+            // Remove brackets and trim
+            val cleaned = json.trim().removeSurrounding("[", "]").trim()
+            if (cleaned.isEmpty()) return emptyList()
+
+            // More robust parsing: Split by "},{"
+            val bookmarkStrings = if (cleaned.contains("},{")) {
+                cleaned.split("},{").map {
+                    var s = it.trim()
+                    if (!s.startsWith("{")) s = "{$s"
+                    if (!s.endsWith("}")) s = "$s}"
+                    s
+                }
+            } else {
+                listOf(if (cleaned.startsWith("{")) cleaned else "{$cleaned}")
+            }
+
+            for (bookmarkStr in bookmarkStrings) {
+                try {
+                    // Extract values using regex for more reliable parsing
+                    val pageIndexMatch = """"pageIndex"\s*:\s*(\d+)""".toRegex().find(bookmarkStr)
+                    val titleMatch = """"title"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"""".toRegex().find(bookmarkStr)
+                    val noteMatch = """"note"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"""".toRegex().find(bookmarkStr)
+
+                    val pageIndex = pageIndexMatch?.groupValues?.get(1)?.toIntOrNull() ?: continue
+                    val title = titleMatch?.groupValues?.get(1)?.let { unescapeJson(it) } ?: "Bookmark"
+                    val note = noteMatch?.groupValues?.get(1)?.let { unescapeJson(it) } ?: ""
+
+                    bookmarks.add(BookmarkData(pageIndex, title, note))
+                    println("Parsed bookmark: pageIndex=$pageIndex, title=$title, note=$note")
+                } catch (e: Exception) {
+                    println("Failed to parse bookmark: $bookmarkStr")
+                    e.printStackTrace()
+                }
+            }
+
+            return bookmarks
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return emptyList()
+        }
+    }
+
+    /**
+     * Unescape JSON string
+     */
+    private fun unescapeJson(text: String): String {
+        return text
+            .replace("\\\\", "\\")
+            .replace("\\\"", "\"")
+            .replace("\\n", "\n")
+            .replace("\\r", "\r")
+            .replace("\\t", "\t")
+    }
+
+    /**
+     * Escape special characters for JSON
+     */
+    private fun escapeJson(text: String): String {
+        return text
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+    }
+
+    /**
+     * Clear all bookmarks
+     */
+    fun clearAllBookmarks() {
+        bookmarks = emptyList()
+        hasUnsavedBookmarks = true
+    }
+
+    /**
+     * Export bookmarks to a text file
+     */
+    fun exportBookmarksToFile(outputPath: String) {
+        screenModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val content = StringBuilder()
+                    content.appendLine("PDF Bookmarks - ${pdfFile.name}")
+                    content.appendLine("=" .repeat(50))
+                    content.appendLine()
+
+                    bookmarks.sortedBy { it.pageIndex }.forEach { bookmark ->
+                        content.appendLine("Page ${bookmark.pageIndex + 1}: ${bookmark.title}")
+                        if (bookmark.note.isNotEmpty()) {
+                            content.appendLine("  Note: ${bookmark.note}")
+                        }
+                        content.appendLine()
+                    }
+
+                    File(outputPath).writeText(content.toString())
+                }
+
+                saveResult = SaveResult.Success(outputPath, bookmarks.size, "Bookmarks exported successfully")
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                saveResult = SaveResult.Error("Failed to export bookmarks: ${e.message}")
+            }
+        }
+    }
+
+    // ============ End Bookmark Management Functions ============
 
     // --- Search API ---
     fun updateSearchQuery(query: String) {

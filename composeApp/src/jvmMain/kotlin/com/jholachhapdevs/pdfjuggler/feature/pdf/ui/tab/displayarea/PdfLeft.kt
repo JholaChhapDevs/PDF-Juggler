@@ -6,82 +6,123 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.offset
+import androidx.compose.ui.window.Dialog
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TableOfContentData
+import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.BookmarkData
 
 @Composable
 fun PdfLeft(
     modifier: Modifier = Modifier,
     thumbnails: List<ImageBitmap> = emptyList(),
     tableOfContents: List<TableOfContentData> = emptyList(),
+    bookmarks: List<BookmarkData> = emptyList(),
     selectedIndex: Int = 0,
     onThumbnailClick: (Int) -> Unit = {},
     onMovePageUp: (Int) -> Unit = {},
     onMovePageDown: (Int) -> Unit = {},
+    onAddBookmark: (BookmarkData) -> Unit = {},
+    onRemoveBookmark: (Int) -> Unit = {},
+    onRemoveBookmarkForPage: (Int) -> Unit = {},
+    onSaveBookmarksToMetadata: () -> Unit = {},
     hasPageChanges: Boolean = false,
+    hasUnsavedBookmarks: Boolean = false,
     listState: LazyListState
 ) {
     val cs = MaterialTheme.colorScheme
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("Thumbnails", "Contents")
 
     Surface(
         color = cs.surface,
         tonalElevation = 1.dp,
         modifier = modifier
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            TabRow(selectedTabIndex = selectedTab) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = { JText(title, style = MaterialTheme.typography.bodySmall) }
-                    )
-                }
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Icon-based tab row
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = cs.surfaceVariant.copy(alpha = 0.5f)
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Filled.Photo,
+                            contentDescription = "Thumbnails",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Filled.TableRows,
+                            contentDescription = "Contents",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    icon = {
+                        Box {
+                            Icon(
+                                imageVector = if (bookmarks.isNotEmpty()) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                contentDescription = "Bookmarks",
+                                modifier = Modifier.size(20.dp)
+                            )
+                            if (bookmarks.isNotEmpty()) {
+                                Badge(
+                                    containerColor = if (hasUnsavedBookmarks) cs.error else cs.primary,
+                                    modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp)
+                                ) {
+                                    JText(
+                                        text = "${bookmarks.size}",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                )
             }
 
             when (selectedTab) {
-                0 -> ThumbnailView(thumbnails, selectedIndex, onThumbnailClick, onMovePageUp, onMovePageDown, hasPageChanges, listState)
-                1 -> TableOfContents(tableOfContents, onThumbnailClick)
+                0 -> ThumbnailView(
+                    thumbnails, selectedIndex, onThumbnailClick,
+                    onMovePageUp, onMovePageDown, hasPageChanges, listState,
+                    bookmarks, onAddBookmark, onRemoveBookmarkForPage
+                )
+                1 -> TableOfContentsView(tableOfContents, onThumbnailClick)
+                2 -> BookmarksView(
+                    bookmarks, thumbnails, selectedIndex,
+                    onThumbnailClick, onRemoveBookmark,
+                    onSaveBookmarksToMetadata, hasUnsavedBookmarks
+                )
             }
         }
     }
@@ -95,9 +136,15 @@ private fun ThumbnailView(
     onMovePageUp: (Int) -> Unit,
     onMovePageDown: (Int) -> Unit,
     hasPageChanges: Boolean,
-    listState: LazyListState
+    listState: LazyListState,
+    bookmarks: List<BookmarkData>,
+    onAddBookmark: (BookmarkData) -> Unit,
+    onRemoveBookmarkForPage: (Int) -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
+    var showAddBookmarkDialog by remember { mutableStateOf(false) }
+    var bookmarkPageIndex by remember { mutableStateOf(0) }
+
     Column(modifier = Modifier.fillMaxSize()) {
         if (hasPageChanges) {
             Row(
@@ -128,11 +175,12 @@ private fun ThumbnailView(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                itemsIndexed(thumbnails) { index, thumbnail ->
-                    var isHovered by remember { mutableStateOf(false) }
-                    val isSelected = index == selectedIndex
-                    val borderColor = if (isSelected) cs.primary else cs.outline.copy(alpha = 0.3f)
-                    val backgroundColor = if (isSelected) cs.primaryContainer.copy(alpha = 0.2f) else cs.surface
+            itemsIndexed(thumbnails) { index, thumbnail ->
+                var isHovered by remember { mutableStateOf(false) }
+                val isSelected = index == selectedIndex
+                val isBookmarked = bookmarks.any { it.pageIndex == index }
+                val borderColor = if (isSelected) cs.primary else cs.outline.copy(alpha = 0.3f)
+                val backgroundColor = if (isSelected) cs.primaryContainer.copy(alpha = 0.2f) else cs.surface
                     
                     Column(
                         modifier = Modifier
@@ -167,8 +215,29 @@ private fun ThumbnailView(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.KeyboardArrowDown,
-                                        contentDescription = "Move page down",
+                                        contentDescription = "Move down",
                                         tint = if (index < thumbnails.size - 1) cs.primary else cs.onSurface.copy(alpha = 0.3f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        if (isBookmarked) {
+                                            // Remove bookmark for this page
+                                            onRemoveBookmarkForPage(index)
+                                        } else {
+                                            // Add bookmark with dialog
+                                            bookmarkPageIndex = index
+                                            showAddBookmarkDialog = true
+                                        }
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                        contentDescription = if (isBookmarked) "Remove bookmark" else "Add bookmark",
+                                        tint = if (isBookmarked) cs.tertiary else cs.primary,
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
@@ -197,19 +266,28 @@ private fun ThumbnailView(
                             Image(
                                 bitmap = thumbnail,
                                 contentDescription = "Page ${index + 1}",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .hoverable(remember { MutableInteractionSource() }, enabled = true),
+                                modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Fit
                             )
+
+                            if (isBookmarked) {
+                                Icon(
+                                    imageVector = Icons.Filled.Bookmark,
+                                    contentDescription = "Bookmarked",
+                                    tint = cs.tertiary,
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp)
+                                        .size(16.dp)
+                                )
+                            }
 
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .hoverable(remember { MutableInteractionSource() })
-                                    .clickable { 
+                                    .clickable {
                                         isHovered = !isHovered
-                                        onThumbnailClick(index) 
+                                        onThumbnailClick(index)
                                     }
                             )
                         }
@@ -221,6 +299,414 @@ private fun ThumbnailView(
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isSelected) cs.primary else cs.onSurface.copy(alpha = 0.7f)
                     )
+                }
+            }
+        }
+    }
+
+    if (showAddBookmarkDialog) {
+        AddBookmarkDialog(
+            pageNumber = bookmarkPageIndex + 1,
+            onDismiss = { showAddBookmarkDialog = false },
+            onConfirm = { title, note ->
+                onAddBookmark(BookmarkData(bookmarkPageIndex, title, note))
+                showAddBookmarkDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun TableOfContentsView(
+    tableOfContents: List<TableOfContentData>,
+    onThumbnailClick: (Int) -> Unit
+) {
+    val cs = MaterialTheme.colorScheme
+
+    if (tableOfContents.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Filled.MenuBook,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = cs.onSurface.copy(alpha = 0.3f)
+                )
+                Spacer(Modifier.height(8.dp))
+                JText(
+                    text = "No table of contents",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = cs.onSurface.copy(alpha = 0.5f)
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(cs.surface)
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            itemsIndexed(tableOfContents) { _, item ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onThumbnailClick(item.pageIndex) },
+                    shape = RoundedCornerShape(8.dp),
+                    color = cs.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        JText(
+                            text = item.title,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        JText(
+                            text = "${item.pageIndex + 1}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = cs.primary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookmarksView(
+    bookmarks: List<BookmarkData>,
+    thumbnails: List<ImageBitmap>,
+    selectedIndex: Int,
+    onThumbnailClick: (Int) -> Unit,
+    onRemoveBookmark: (Int) -> Unit,
+    onSaveBookmarksToMetadata: () -> Unit,
+    hasUnsavedBookmarks: Boolean
+) {
+    val cs = MaterialTheme.colorScheme
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (hasUnsavedBookmarks && bookmarks.isNotEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = cs.errorContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        JText(
+                            text = "Unsaved Bookmarks",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = cs.onErrorContainer
+                        )
+                        JText(
+                            text = "Save to PDF metadata",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cs.onErrorContainer.copy(alpha = 0.7f)
+                        )
+                    }
+                    Button(
+                        onClick = onSaveBookmarksToMetadata,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = cs.error
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Save,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        JText("Save")
+                    }
+                }
+            }
+        }
+
+        if (bookmarks.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Outlined.BookmarkBorder,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = cs.onSurface.copy(alpha = 0.3f)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    JText(
+                        text = "No bookmarks yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = cs.onSurface.copy(alpha = 0.5f)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    JText(
+                        text = "Add bookmarks from thumbnails",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurface.copy(alpha = 0.4f)
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(cs.surface)
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                itemsIndexed(bookmarks) { idx, bookmark ->
+                    val isSelected = bookmark.pageIndex == selectedIndex
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onThumbnailClick(bookmark.pageIndex) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected) cs.primaryContainer else cs.surfaceVariant
+                        ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = if (isSelected) 4.dp else 1.dp
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Thumbnail preview
+                            if (bookmark.pageIndex < thumbnails.size) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(60.dp, 85.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .border(1.dp, cs.outline.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                                ) {
+                                    Image(
+                                        bitmap = thumbnails[bookmark.pageIndex],
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Bookmark,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = cs.tertiary
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    JText(
+                                        text = bookmark.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (isSelected) cs.onPrimaryContainer else cs.onSurface
+                                    )
+                                }
+
+                                Spacer(Modifier.height(4.dp))
+
+                                JText(
+                                    text = "Page ${bookmark.pageIndex + 1}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = cs.primary
+                                )
+
+                                if (bookmark.note.isNotEmpty()) {
+                                    Spacer(Modifier.height(4.dp))
+                                    JText(
+                                        text = bookmark.note,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (isSelected) cs.onPrimaryContainer.copy(alpha = 0.7f)
+                                        else cs.onSurface.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = { onRemoveBookmark(idx) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = "Remove bookmark",
+                                    tint = cs.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddBookmarkDialog(
+    pageNumber: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
+) {
+    val cs = MaterialTheme.colorScheme
+    var title by remember { mutableStateOf("Page $pageNumber") }
+    var note by remember { mutableStateOf("") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = cs.surface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Bookmark,
+                        contentDescription = null,
+                        tint = cs.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    JText(
+                        text = "Add Bookmark",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = cs.onSurface
+                    )
+                }
+
+                Divider(color = cs.outlineVariant)
+
+                // Title field
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    JText(
+                        text = "Title",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = cs.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        placeholder = { JText("Enter bookmark title", color = cs.onSurfaceVariant.copy(alpha = 0.6f)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = cs.primary,
+                            unfocusedBorderColor = cs.outline,
+                            focusedLabelColor = cs.primary,
+                            cursorColor = cs.primary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+
+                // Note field
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    JText(
+                        text = "Note (Optional)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = cs.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = { note = it },
+                        placeholder = { JText("Add a note...", color = cs.onSurfaceVariant.copy(alpha = 0.6f)) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp),
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = cs.primary,
+                            unfocusedBorderColor = cs.outline,
+                            focusedLabelColor = cs.primary,
+                            cursorColor = cs.primary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = cs.onSurfaceVariant
+                        )
+                    ) {
+                        JText("Cancel")
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+
+                    Button(
+                        onClick = { onConfirm(title, note) },
+                        enabled = title.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = cs.primary,
+                            contentColor = cs.onPrimary,
+                            disabledContainerColor = cs.surfaceVariant,
+                            disabledContentColor = cs.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        JText("Add Bookmark")
+                    }
                 }
             }
         }

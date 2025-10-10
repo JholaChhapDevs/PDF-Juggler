@@ -146,11 +146,17 @@ fun PdfDisplayArea(
                             modifier = Modifier.weight(0.15f).fillMaxSize(),
                             thumbnails = model.thumbnails,
                             tableOfContents = model.tableOfContent,
+                            bookmarks = model.bookmarks,
                             selectedIndex = model.selectedPageIndex,
                             onThumbnailClick = { model.selectPage(it) },
                             onMovePageUp = { model.movePageUp(it) },
                             onMovePageDown = { model.movePageDown(it) },
+                            onAddBookmark = { bookmark -> model.addBookmark(bookmark) },
+                            onRemoveBookmark = { index -> model.removeBookmark(index) },
+                            onRemoveBookmarkForPage = { pageIndex -> model.removeBookmarkForPage(pageIndex) },
+                            onSaveBookmarksToMetadata = { model.saveBookmarksToMetadata() },
                             hasPageChanges = model.hasPageChanges,
+                            hasUnsavedBookmarks = model.hasUnsavedBookmarks,
                             listState = listState
                         )
                     }
