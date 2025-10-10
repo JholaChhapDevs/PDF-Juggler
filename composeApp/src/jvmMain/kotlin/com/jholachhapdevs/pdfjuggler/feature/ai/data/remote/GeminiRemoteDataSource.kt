@@ -5,7 +5,6 @@ import com.jholachhapdevs.pdfjuggler.core.util.Env
 import com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiContent
 import com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiFile
 import com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiFileData
-import com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiInlineData
 import com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiPart
 import com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiRequest
 import com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiResponse
@@ -39,35 +38,13 @@ class GeminiRemoteDataSource(
 
         val contents = limited.map { msg ->
             val parts = buildList {
-                // Handle text with potential image tokens
-                if (msg.text.isNotBlank()) {
-                    val parsed = ImageTokenParser.parseToParts(msg.text)
-                    if (parsed.isEmpty()) {
-                        add(GeminiPart(text = msg.text))
-                    } else {
-                        parsed.forEach { part ->
-                            when (part) {
-                                is ImageTokenParser.Part.Text -> add(GeminiPart(text = part.text))
-                                is ImageTokenParser.Part.Image -> add(
-                                    GeminiPart(
-                                        inlineData = GeminiInlineData(
-                                            mimeType = part.mimeType,
-                                            data = part.base64
-                                        )
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-                
-                // Handle attached files
-                msg.files.forEach { file ->
+                if (msg.text.isNotBlank()) add(GeminiPart(text = msg.text))
+                msg.files.forEach { f ->
                     add(
                         GeminiPart(
                             fileData = GeminiFileData(
-                                fileUri = file.fileUri,
-                                mimeType = file.mimeType
+                                fileUri = f.fileUri,
+                                mimeType = f.mimeType
                             )
                         )
                     )
