@@ -15,17 +15,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.RotateLeft
 import androidx.compose.material.icons.automirrored.filled.RotateRight
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ViewColumn
-import androidx.compose.material.icons.filled.ViewDay
+import androidx.compose.material.icons.filled.Splitscreen
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.RestartAlt
-import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -125,73 +124,99 @@ fun TabBar(
 
                     // Center: Zoom and Rotation controls
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .background(
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
                     ) {
                         // Zoom Out
                         IconButton(
                             onClick = onZoomOut,
-                            enabled = zoomFactor > minZoom + 1e-4f
+                            enabled = zoomFactor > minZoom + 1e-4f,
+                            modifier = Modifier.width(40.dp).height(40.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.ZoomOut,
                                 contentDescription = "Zoom Out",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (zoomFactor > minZoom + 1e-4f)
+                                    MaterialTheme.colorScheme.onSurface
+                                else
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                             )
                         }
 
                         // Zoom percentage display
                         Surface(
-                            color = MaterialTheme.colorScheme.surface,
-                            shape = RoundedCornerShape(4.dp)
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(6.dp)
                         ) {
                             JText(
                                 text = "${(zoomFactor * 100).toInt()}%",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
                         }
 
                         // Zoom In
-                        IconButton(onClick = onZoomIn) {
+                        IconButton(
+                            onClick = onZoomIn,
+                            modifier = Modifier.width(40.dp).height(40.dp)
+                        ) {
                             Icon(
                                 imageVector = Icons.Filled.ZoomIn,
                                 contentDescription = "Zoom In",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
 
                         // Reset Zoom
-                        IconButton(onClick = onResetZoom) {
+                        IconButton(
+                            onClick = onResetZoom,
+                            modifier = Modifier.width(40.dp).height(40.dp)
+                        ) {
                             Icon(
                                 imageVector = Icons.Outlined.RestartAlt,
                                 contentDescription = "Reset Zoom",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
 
                         // Divider
-                        VerticalDivider(
+                        Spacer(
                             modifier = Modifier
-                                .height(24.dp)
+                                .width(1.dp)
+                                .height(28.dp)
+                                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                                 .padding(horizontal = 4.dp)
                         )
 
                         // Rotate Left
-                        IconButton(onClick = onRotateCounterClockwise) {
+                        IconButton(
+                            onClick = onRotateCounterClockwise,
+                            modifier = Modifier.width(40.dp).height(40.dp)
+                        ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.RotateLeft,
                                 contentDescription = "Rotate Left",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
 
                         // Rotate Right
-                        IconButton(onClick = onRotateClockwise) {
+                        IconButton(
+                            onClick = onRotateClockwise,
+                            modifier = Modifier.width(40.dp).height(40.dp)
+                        ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.RotateRight,
                                 contentDescription = "Rotate Right",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -201,37 +226,49 @@ fun TabBar(
 
                     // Right side: Print, AI, Split View, Search, Fullscreen
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .background(
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
                     ) {
                         // Print
-                        IconButton(onClick = onPrint) {
+                        IconButton(
+                            onClick = onPrint,
+                            modifier = Modifier.width(40.dp).height(40.dp)
+                        ) {
                             Icon(
-                                imageVector = Icons.Outlined.Print,
+                                imageVector = Icons.Filled.Print,
                                 contentDescription = "Print",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
 
                         // AI Chat toggle
-                        IconButton(onClick = onToggleAiChat) {
+                        IconButton(
+                            onClick = onToggleAiChat,
+                            modifier = Modifier.width(40.dp).height(40.dp)
+                        ) {
                             Icon(
-                                imageVector = Icons.Outlined.SmartToy,
+                                imageVector = Icons.Filled.AutoAwesome,
                                 contentDescription = if (isAiChatEnabled) "Hide AI chat" else "Show AI chat",
                                 tint = if (isAiChatEnabled)
                                     MaterialTheme.colorScheme.primary
                                 else
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                             )
                         }
 
                         // Split view toggle
-                        IconButton(onClick = onToggleSplitView) {
+                        IconButton(
+                            onClick = onToggleSplitView,
+                            modifier = Modifier.width(40.dp).height(40.dp)
+                        ) {
                             Icon(
-                                imageVector = if (isSplitViewEnabled)
-                                    Icons.Filled.ViewDay
-                                else
-                                    Icons.Filled.ViewColumn,
+                                imageVector = Icons.Filled.Splitscreen,
                                 contentDescription = if (isSplitViewEnabled)
                                     "Disable split view"
                                 else
@@ -239,38 +276,46 @@ fun TabBar(
                                 tint = if (isSplitViewEnabled)
                                     MaterialTheme.colorScheme.primary
                                 else
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                             )
                         }
 
                         // Search
-                        IconButton(onClick = onSearchClick) {
+                        IconButton(
+                            onClick = onSearchClick,
+                            modifier = Modifier.width(40.dp).height(40.dp)
+                        ) {
                             Icon(
                                 imageVector = Icons.Filled.Search,
                                 contentDescription = "Search",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
 
                         // Divider
-                        VerticalDivider(
+                        Spacer(
                             modifier = Modifier
-                                .height(24.dp)
+                                .width(1.dp)
+                                .height(28.dp)
+                                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                                 .padding(horizontal = 4.dp)
                         )
 
                         // Fullscreen toggle
-                        IconButton(onClick = onToggleFullscreen) {
+                        IconButton(
+                            onClick = onToggleFullscreen,
+                            modifier = Modifier.width(40.dp).height(40.dp)
+                        ) {
                             Icon(
                                 imageVector = if (isFullscreen)
-                                    Icons.Default.FullscreenExit
+                                    Icons.Filled.FullscreenExit
                                 else
-                                    Icons.Default.Fullscreen,
+                                    Icons.Filled.Fullscreen,
                                 contentDescription = if (isFullscreen)
                                     "Exit Fullscreen"
                                 else
                                     "Enter Fullscreen",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
