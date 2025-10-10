@@ -142,8 +142,6 @@ private fun ThumbnailView(
     onRemoveBookmarkForPage: (Int) -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
-    var showAddBookmarkDialog by remember { mutableStateOf(false) }
-    var bookmarkPageIndex by remember { mutableStateOf(0) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (hasPageChanges) {
@@ -227,9 +225,8 @@ private fun ThumbnailView(
                                         // Remove bookmark for this page
                                         onRemoveBookmarkForPage(index)
                                     } else {
-                                        // Add bookmark with dialog
-                                        bookmarkPageIndex = index
-                                        showAddBookmarkDialog = true
+                                        // Add bookmark directly without dialog
+                                        onAddBookmark(BookmarkData(index, "Page ${index + 1}", ""))
                                     }
                                 },
                                 modifier = Modifier.size(24.dp)
@@ -298,17 +295,6 @@ private fun ThumbnailView(
                 }
             }
         }
-    }
-
-    if (showAddBookmarkDialog) {
-        AddBookmarkDialog(
-            pageNumber = bookmarkPageIndex + 1,
-            onDismiss = { showAddBookmarkDialog = false },
-            onConfirm = { title, note ->
-                onAddBookmark(BookmarkData(bookmarkPageIndex, title, note))
-                showAddBookmarkDialog = false
-            }
-        )
     }
 }
 
@@ -395,48 +381,23 @@ private fun BookmarksView(
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (hasUnsavedBookmarks && bookmarks.isNotEmpty()) {
-            Card(
+            Button(
+                onClick = onSaveBookmarksToMetadata,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = cs.errorContainer
-                )
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = cs.primary
+                ),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        JText(
-                            text = "Unsaved Bookmarks",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = cs.onErrorContainer
-                        )
-                        JText(
-                            text = "Save to PDF metadata",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = cs.onErrorContainer.copy(alpha = 0.7f)
-                        )
-                    }
-                    Button(
-                        onClick = onSaveBookmarksToMetadata,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = cs.error
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Save,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        JText("Save")
-                    }
-                }
+                Icon(
+                    imageVector = Icons.Filled.Save,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                JText("Save Bookmarks", fontWeight = FontWeight.Medium)
             }
         }
 
@@ -538,18 +499,6 @@ private fun BookmarksView(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = cs.primary
                                 )
-
-                                if (bookmark.note.isNotEmpty()) {
-                                    Spacer(Modifier.height(4.dp))
-                                    JText(
-                                        text = bookmark.note,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        color = if (isSelected) cs.onPrimaryContainer.copy(alpha = 0.7f)
-                                        else cs.onSurface.copy(alpha = 0.7f)
-                                    )
-                                }
                             }
 
                             IconButton(
@@ -564,144 +513,6 @@ private fun BookmarksView(
                                 )
                             }
                         }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AddBookmarkDialog(
-    pageNumber: Int,
-    onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit
-) {
-    val cs = MaterialTheme.colorScheme
-    var title by remember { mutableStateOf("Page $pageNumber") }
-    var note by remember { mutableStateOf("") }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = cs.surface
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Header
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Bookmark,
-                        contentDescription = null,
-                        tint = cs.primary,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    JText(
-                        text = "Add Bookmark",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = cs.onSurface
-                    )
-                }
-
-                Divider(color = cs.outlineVariant)
-
-                // Title field
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    JText(
-                        text = "Title",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = cs.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        placeholder = { JText("Enter bookmark title", color = cs.onSurfaceVariant.copy(alpha = 0.6f)) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = cs.primary,
-                            unfocusedBorderColor = cs.outline,
-                            focusedLabelColor = cs.primary,
-                            cursorColor = cs.primary
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-
-                // Note field
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    JText(
-                        text = "Note (Optional)",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = cs.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = note,
-                        onValueChange = { note = it },
-                        placeholder = { JText("Add a note...", color = cs.onSurfaceVariant.copy(alpha = 0.6f)) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp),
-                        maxLines = 4,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = cs.primary,
-                            unfocusedBorderColor = cs.outline,
-                            focusedLabelColor = cs.primary,
-                            cursorColor = cs.primary
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-
-                // Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = cs.onSurfaceVariant
-                        )
-                    ) {
-                        JText("Cancel")
-                    }
-
-                    Spacer(Modifier.width(8.dp))
-
-                    Button(
-                        onClick = { onConfirm(title, note) },
-                        enabled = title.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = cs.primary,
-                            contentColor = cs.onPrimary,
-                            disabledContainerColor = cs.surfaceVariant,
-                            disabledContentColor = cs.onSurfaceVariant
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        JText("Add Bookmark")
                     }
                 }
             }
