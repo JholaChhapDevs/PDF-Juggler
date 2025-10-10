@@ -45,12 +45,15 @@ fun PdfDisplayArea(
     val listState = rememberLazyListState()
     var showSaveAsDialog by remember { mutableStateOf(false) }
 
+    // Keep left pane scrolled to the selected page
     LaunchedEffect(model.pdfFile.path) {
         if (model.thumbnails.isNotEmpty()) {
             val idx = model.selectedPageIndex.coerceIn(0, model.thumbnails.lastIndex)
             listState.scrollToItem(idx, 0)
         }
     }
+
+
 
     if (model.isLoading) {
         Box(
@@ -89,7 +92,7 @@ fun PdfDisplayArea(
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
-                            
+
                             if (model.isSaving) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
@@ -98,7 +101,7 @@ fun PdfDisplayArea(
                                 )
                             }
                         }
-                        
+
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -114,7 +117,7 @@ fun PdfDisplayArea(
                                 Spacer(Modifier.width(4.dp))
                                 JText("Reset")
                             }
-                            
+
                             Button(
                                 onClick = { showSaveAsDialog = true },
                                 enabled = !model.isSaving
@@ -131,21 +134,27 @@ fun PdfDisplayArea(
                     }
                 }
             }
-            
+
             Row(Modifier.fillMaxSize()) {
                 PdfLeft(
                     modifier = Modifier.weight(0.15f).fillMaxSize(),
                     thumbnails = model.thumbnails,
                     tableOfContents = model.tableOfContent,
+                    bookmarks = model.bookmarks,
                     selectedIndex = model.selectedPageIndex,
                     onThumbnailClick = { model.selectPage(it) },
                     onMovePageUp = { model.movePageUp(it) },
                     onMovePageDown = { model.movePageDown(it) },
+                    onAddBookmark = { bookmark -> model.addBookmark(bookmark) },
+                    onRemoveBookmark = { index -> model.removeBookmark(index) },
+                    onRemoveBookmarkForPage = { pageIndex -> model.removeBookmarkForPage(pageIndex) },
+                    onSaveBookmarksToMetadata = { model.saveBookmarksToMetadata() },
                     hasPageChanges = model.hasPageChanges,
+                    hasUnsavedBookmarks = model.hasUnsavedBookmarks,
                     listState = listState
                 )
-               
-               PdfMid(
+
+                PdfMid(
                     modifier = Modifier.weight(0.85f).fillMaxSize(),
                     pageImage = model.currentPageImage,
                     textData = model.allTextDataWithCoordinates[model.selectedPageIndex] ?: emptyList()
@@ -153,7 +162,7 @@ fun PdfDisplayArea(
             }
         }
     }
-    
+
     SaveDialog(
         isOpen = showSaveAsDialog,
         currentFileName = model.pdfFile.path,
@@ -165,7 +174,7 @@ fun PdfDisplayArea(
         },
         onValidatePath = { path -> model.validateSavePath(path) }
     )
-    
+
     SaveResultDialog(
         result = model.saveResult,
         onDismiss = { model.clearSaveResult() }
