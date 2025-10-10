@@ -63,6 +63,15 @@ fun PdfTabComponent(
             }
         }
 
+        // Observe pending AI request on the current tab and auto-enable AI chat panel
+        val currentTabModel = model.getCurrentTabModel()
+        val pendingAi = currentTabModel?.pendingAiRequest
+        LaunchedEffect(pendingAi) {
+            if (pendingAi != null) {
+                model.setAiChatVisible(true)
+            }
+        }
+
         Scaffold(
             topBar = {
                 TabBar(

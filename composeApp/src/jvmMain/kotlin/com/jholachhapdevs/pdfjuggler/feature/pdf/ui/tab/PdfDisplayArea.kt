@@ -2,44 +2,20 @@ package com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.SaveAs
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.input.key.*
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JButton
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
@@ -217,8 +193,9 @@ fun PdfDisplayArea(
                 .focusable()
         ) {
             Column(Modifier.fillMaxSize()) {
-                // Save Controls Bar (shown when there are page changes)
-                if (model.hasPageChanges) {
+                // Unified Save Controls Bar (shown when any changes exist)
+                val hasAnyUnsaved = model.hasPageChanges || model.hasUnsavedBookmarks || model.hasUnsavedHighlights
+                if (hasAnyUnsaved) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -241,13 +218,18 @@ fun PdfDisplayArea(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                val parts = buildList {
+                                    if (model.hasPageChanges) add("page order")
+                                    if (model.hasUnsavedBookmarks) add("bookmarks")
+                                    if (model.hasUnsavedHighlights) add("highlights")
+                                }
+                                val msg = if (parts.isEmpty()) "Unsaved changes" else "Unsaved: " + parts.joinToString(", ")
                                 JText(
-                                    text = "Pages have been reordered",
+                                    text = msg,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
-                                
                                 if (model.isSaving) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(16.dp),
@@ -256,15 +238,11 @@ fun PdfDisplayArea(
                                     )
                                 }
                             }
-                            
                             // Action buttons
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // Reset button
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(
                                     onClick = { model.resetPageOrder() },
-                                    enabled = !model.isSaving
+                                    enabled = !model.isSaving && model.hasPageChanges
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Undo,
@@ -272,10 +250,22 @@ fun PdfDisplayArea(
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Spacer(Modifier.width(4.dp))
-                                    JText("Reset")
+                                    JText("Reset order")
                                 }
-                                
-                                // Save As button
+                                // Save (overwrite)
+                                Button(
+                                    onClick = { model.saveChanges() },
+                                    enabled = !model.isSaving
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Save,
+                                        contentDescription = "Save",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    JText("Save")
+                                }
+                                // Save As
                                 Button(
                                     onClick = { showSaveAsDialog = true },
                                     enabled = !model.isSaving
@@ -354,7 +344,15 @@ fun PdfDisplayArea(
                         onZoomChanged = { z -> model.onZoomChanged(z) },
                         searchHighlightPositions = model.currentMatchForDisplayedPage(),
                         scrollToMatchTrigger = model.scrollToMatchTrigger,
-                        pageIndex = originalPageIndex
+                        pageIndex = originalPageIndex,
+                        pageHighlights = model.getHighlightsForDisplayedPage(),
+                        onAddHighlight = { rects, color ->
+                            if (rects.isNotEmpty()) {
+                                model.addHighlightForDisplayedPage(rects, color, model.currentRotation)
+                            }
+                        },
+                        onDictionaryRequest = { text -> model.requestAiDictionary(text) },
+                        onTranslateRequest = { text -> model.requestAiTranslate(text) }
                     )
                     
                     // AI Chat panel (only show when enabled and not in fullscreen)
@@ -386,7 +384,7 @@ fun PdfDisplayArea(
         onDismiss = { showSaveAsDialog = false },
         onSave = { path ->
             showSaveAsDialog = false
-            model.savePdfAs(path)
+            model.saveChangesAs(path)
         },
         onValidatePath = { path -> model.validateSavePath(path) }
     )

@@ -132,6 +132,9 @@ class PdfTabScreenModel(
     fun toggleAiChat() {
         isAiChatEnabled = !isAiChatEnabled
     }
+    fun setAiChatVisible(enabled: Boolean) {
+        isAiChatEnabled = enabled
+    }
 
     fun getTabModel(tab: Tab?): TabScreenModel? {
         return (tab as? PdfTab)?.pdfFile?.let { getOrCreateModel(it) }
