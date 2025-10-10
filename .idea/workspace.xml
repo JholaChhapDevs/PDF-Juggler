@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="c50051af-3281-454c-92d5-1c969d8f2204" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/build.gradle.kts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/build.gradle.kts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/composeResources/drawable/compose-multiplatform.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/composeResources/font/Bogue-Semibold-Regular.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/composeResources/font/Chord-Brights.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/composeResources/font/font1.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/App.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/datastore/Decryption.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/datastore/Encryption.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/datastore/PrefsManager.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/datastore/SecretKey.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/networking/GetEngine.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/networking/KTorApiClient.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/networking/KtorClientBuilder.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/pdf/HighQualityPdfRenderer.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/pdf/PdfPageReorderUtil.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/ui/Color.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/ui/Font.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/ui/Theme.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/ui/Typography.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/ui/components/JButton.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/ui/components/JText.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/ui/components/noRippleClickable.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/core/util/LocalComposeWindow.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/data/model/PdfFileData.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/data/repository/PdfFileRepository.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/domain/model/BookmarkData.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/domain/model/PdfFile.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/domain/model/TableOfContentData.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/domain/model/TextPositionData.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/domain/usecase/GetPdfUseCase.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/PdfComponent.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/PdfScreen.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/PdfScreenModel.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/PdfTabComponent.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/PdfTabScreen.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/PdfTabScreenModel.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/PositionAwareTextStripper.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/component/AdvancedPrintOptions.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/component/PrintProgressDialog.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/component/SaveDialog.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/component/SplitViewComponent.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/component/TabBar.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/component/TabChip.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/tab/PdfDisplayArea.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/tab/PdfTab.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/tab/TabScreenModel.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/tab/displayarea/PdfLeft.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/tab/displayarea/PdfMid.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/tab/displayarea/PdfRight.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/pdf/ui/tab/displayarea/TableOfContents.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/update/data/model/UpdateInfo.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/update/data/repository/UpdateRepository.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/update/domain/model/UpdateInfo.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/update/domain/usecase/GetUpdatesUseCase.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/update/ui/UpdateComponent.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/update/ui/UpdateScreen.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/update/ui/UpdateScreenModel.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/feature/update/ui/UpdateUiState.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/legacy/JButton.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/main.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/composeApp/src/jvmMain/kotlin/com/jholachhapdevs/pdfjuggler/service/PrintingService.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/gradle.properties" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/gradle/libs.versions.toml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/gradle/wrapper/gradle-wrapper.jar" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/gradle/wrapper/gradle-wrapper.properties" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/gradlew" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/gradlew.bat" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/settings.gradle.kts" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ExternalProjectsData">
+    <projectState path="$PROJECT_DIR$">
+      <ProjectState />
+    </projectState>
+  </component>
+  <component name="ExternalProjectsManager">
+    <system id="GRADLE">
+      <state>
+        <task path="$PROJECT_DIR$">
+          <activation />
+        </task>
+        <task path="$PROJECT_DIR$/composeApp">
+          <activation />
+        </task>
+        <projects_view>
+          <tree_state>
+            <expand />
+            <select />
+          </tree_state>
+        </projects_view>
+      </state>
+    </system>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="dev" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5
+}</component>
+  <component name="ProjectId" id="33mmIwYVFIFAOuA2wriX0ubduxr" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="1" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Batch.gradlew.executor": "Run",
+    "Gradle.PDF-Juggler [.\\gradlew composeApp:run].executor": "Run",
+    "Gradle.PDF-Juggler [composeApp:run].executor": "Run",
+    "Gradle.PDF-Juggler [run].executor": "Run",
+    "Gradle.PDF-Juggler:composeApp [jvmJar].executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "feature/bookmark",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "D:/Code/Codesangam25/softablitz/PDF-Juggler",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "preferences.language.Kotlin",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="RunManager" selected="Gradle.PDF-Juggler [run]">
+    <configuration name="PDF-Juggler [run]" type="GradleRunConfiguration" factoryName="Gradle">
+      <ExternalSystemSettings>
+        <option name="executionName" />
+        <option name="externalProjectPath" value="$PROJECT_DIR$" />
+        <option name="externalSystemIdString" value="GRADLE" />
+        <option name="scriptParameters" value="" />
+        <option name="taskDescriptions">
+          <list />
+        </option>
+        <option name="taskNames">
+          <list>
+            <option value=":composeApp:run" />
+          </list>
+        </option>
+        <option name="vmOptions" />
+      </ExternalSystemSettings>
+      <ExternalSystemDebugServerProcess>true</ExternalSystemDebugServerProcess>
+      <ExternalSystemReattachDebugProcess>true</ExternalSystemReattachDebugProcess>
+      <DebugAllEnabled>false</DebugAllEnabled>
+      <RunAsTest>false</RunAsTest>
+      <method v="2" />
+    </configuration>
+    <configuration name="PDF-Juggler:composeApp [jvmJar]" type="GradleRunConfiguration" factoryName="Gradle" temporary="true">
+      <ExternalSystemSettings>
+        <option name="executionName" />
+        <option name="externalProjectPath" value="$PROJECT_DIR$/composeApp" />
+        <option name="externalSystemIdString" value="GRADLE" />
+        <option name="scriptParameters" value="" />
+        <option name="taskDescriptions">
+          <list />
+        </option>
+        <option name="taskNames">
+          <list>
+            <option value="jvmJar" />
+          </list>
+        </option>
+        <option name="vmOptions" />
+      </ExternalSystemSettings>
+      <ExternalSystemDebugServerProcess>true</ExternalSystemDebugServerProcess>
+      <ExternalSystemReattachDebugProcess>true</ExternalSystemReattachDebugProcess>
+      <DebugAllEnabled>false</DebugAllEnabled>
+      <RunAsTest>false</RunAsTest>
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="JetRunConfigurationType">
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="KotlinStandaloneScriptRunConfigurationType">
+      <option name="filePath" />
+      <method v="2" />
+    </configuration>
+    <list>
+      <item itemvalue="Gradle.PDF-Juggler [run]" />
+      <item itemvalue="Gradle.PDF-Juggler:composeApp [jvmJar]" />
+    </list>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Gradle.PDF-Juggler:composeApp [jvmJar]" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-9823dce3aa75-a94e463ab2e7-intellij.indexing.shared.core-IU-243.26053.27" />
+        <option value="bundled-js-predefined-d6986cc7102b-1632447f56bf-JavaScript-IU-243.26053.27" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="c50051af-3281-454c-92d5-1c969d8f2204" name="Changes" comment="" />
+      <created>1759930546099</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1759930546099</updated>
+      <workItem from="1759930547417" duration="408000" />
+      <workItem from="1759931105578" duration="8758000" />
+      <workItem from="1759944167102" duration="3829000" />
+      <workItem from="1759948074797" duration="4987000" />
+      <workItem from="1759992541594" duration="1290000" />
+      <workItem from="1760001874671" duration="4767000" />
+      <workItem from="1760016264380" duration="128000" />
+      <workItem from="1760016405114" duration="21880000" />
+      <workItem from="1760056503009" duration="38000" />
+      <workItem from="1760057908463" duration="122000" />
+      <workItem from="1760058137780" duration="5790000" />
+      <workItem from="1760070737446" duration="1708000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
+  </component>
+</project>
