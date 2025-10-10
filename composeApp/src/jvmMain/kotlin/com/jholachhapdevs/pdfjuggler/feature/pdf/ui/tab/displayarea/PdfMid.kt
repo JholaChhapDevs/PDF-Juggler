@@ -50,16 +50,12 @@ fun PdfMid(
     onRotateClockwise: () -> Unit = {},
     onRotateCounterClockwise: () -> Unit = {},
     onToggleFullscreen: () -> Unit = {},
-    // New: size of the PDF page in points (mediaBox width/height)
     pageSizePoints: Size? = null,
-    // New: notify zoom changes to parent
     onZoomChanged: (Float) -> Unit = {},
-    // New: positions to highlight for search match on current page
     searchHighlightPositions: List<TextPositionData> = emptyList(),
-    // New: trigger for auto-scrolling to search matches
     scrollToMatchTrigger: Int = 0,
-    // Page index for cache invalidation
-    pageIndex: Int = 0
+    pageIndex: Int = 0,
+    showToolbar: Boolean = true // New parameter to control toolbar visibility
 ) {
     val cs = MaterialTheme.colorScheme
     val clipboardManager = LocalClipboardManager.current
@@ -73,7 +69,7 @@ fun PdfMid(
     var selectedText by remember { mutableStateOf("") }
     var isSelecting by remember { mutableStateOf(false) }
     var selectedRectsNormalized by remember { mutableStateOf<List<Rect>>(emptyList()) }
-    
+
     // Clear selection when switching pages (when textData changes)
     LaunchedEffect(textData) {
         selectionStart = null
@@ -89,10 +85,8 @@ fun PdfMid(
     }
 
     fun rotateRectNormalized(l: Float, t: Float, w: Float, h: Float, angle: Int): Rect {
-        // l,t,w,h are all in 0..1 space relative to the unrotated page with top-left origin
         return when ((angle % 360 + 360) % 360) {
             90 -> {
-                // 90 CW
                 val nl = 1f - (t + h)
                 val nt = l
                 Rect(nl, nt, nl + h, nt + w)
@@ -113,22 +107,19 @@ fun PdfMid(
 
     fun mergeRectsOnLines(rects: List<Rect>): List<Rect> {
         if (rects.isEmpty()) return emptyList()
-        // Sort by top then left
         val sorted = rects.sortedWith(compareBy({ it.top }, { it.left }))
         val merged = mutableListOf<Rect>()
 
-        // Dynamic tolerances based on median height
         val heights = sorted.map { it.height }.sorted()
         val medianH = heights[heights.size / 2]
-        val lineTol = medianH * 0.6f // vertical tolerance to consider same line
-        val gapTol = medianH * 0.8f // horizontal gap tolerance to merge
+        val lineTol = medianH * 0.6f
+        val gapTol = medianH * 0.8f
 
         var currentLine = mutableListOf<Rect>()
         var currentLineTop = sorted.first().top
 
         fun flushLine() {
             if (currentLine.isEmpty()) return
-            // Merge horizontally adjacent boxes in the current line
             currentLine.sortBy { it.left }
             var acc = currentLine.first()
             for (i in 1 until currentLine.size) {
@@ -164,7 +155,6 @@ fun PdfMid(
         return merged
     }
 
-    // Create bounding boxes for text using PDF points -> normalized to 0..1, then scaled to canvas
     val textBoundsNormalized = remember(textData, pageImage, pageSizePoints, rotation, pageIndex) {
         val rot = ((rotation % 360f) + 360f) % 360f
         val rotInt = when {
@@ -178,7 +168,6 @@ fun PdfMid(
             val pdfW = pageSizePoints.width
             val pdfH = pageSizePoints.height
             textData.mapIndexed { index, t ->
-                // We use xDirAdj/yDirAdj from PDFBox => y increases downward from top-left origin
                 val l = (t.x / pdfW)
                 val w = (t.width / pdfW)
                 val h = (t.height / pdfH)
@@ -187,20 +176,19 @@ fun PdfMid(
                 val top2 = top.coerceAtLeast(0f)
                 val right = (l + w).coerceAtMost(1f)
                 val bottom = (top + h).coerceAtMost(1f)
-                
+
                 val rect0 = Rect(
                     left = left,
                     top = top2,
                     right = right,
                     bottom = bottom
                 )
-                
+
                 val rectR = rotateRectNormalized(rect0.left, rect0.top, rect0.width, rect0.height, rotInt)
-                
+
                 rectR to t
             }
         } else {
-            // Fallback: approximate using bitmap pixels if page size unknown
             pageImage?.let { image ->
                 val pdfW = image.width.toFloat()
                 val pdfH = image.height.toFloat()
@@ -227,16 +215,14 @@ fun PdfMid(
         normalized
     }
 
-    // --- Zoom & Pan state (use zoom functionality from provided file) ---
+    // Zoom & Pan state
     var zoomFactor by remember { mutableStateOf(1f) }
     var panOffset by remember { mutableStateOf(Offset.Zero) }
-    var contentBaseSize by remember { mutableStateOf(IntSize.Zero) } // size of unscaled content (image area)
+    var contentBaseSize by remember { mutableStateOf(IntSize.Zero) }
 
-    // Set a constant minimum zoom to allow zooming out below 100%
     val minZoom = 0.25f
     val maxZoom = 5f
 
-    // Remove previous dynamic min zoom correction; only ensure zoomFactor stays within [minZoom, maxZoom]
     LaunchedEffect(zoomFactor) {
         if (zoomFactor < minZoom) {
             zoomFactor = minZoom
@@ -271,7 +257,6 @@ fun PdfMid(
         zoomFactor = nz
     }
 
-    // Replace resetZoom to set to 100% instead of fit-to-parent
     fun resetZoom() {
         zoomFactor = 1f
         panOffset = Offset.Zero
@@ -279,44 +264,39 @@ fun PdfMid(
     fun zoomInStep() { setZoomAroundAnchor(zoomFactor * 1.25f, Offset(viewportSize.width/2f, viewportSize.height/2f)) }
     fun zoomOutStep() { setZoomAroundAnchor(zoomFactor / 1.25f, Offset(viewportSize.width/2f, viewportSize.height/2f)) }
 
-    // Auto-scroll to search match when trigger changes
+    // Auto-scroll to search match
     LaunchedEffect(scrollToMatchTrigger, searchHighlightPositions, viewportSize, contentBaseSize) {
-        if (scrollToMatchTrigger > 0 && searchHighlightPositions.isNotEmpty() && 
-            viewportSize.width > 0 && viewportSize.height > 0 && 
+        if (scrollToMatchTrigger > 0 && searchHighlightPositions.isNotEmpty() &&
+            viewportSize.width > 0 && viewportSize.height > 0 &&
             contentBaseSize.width > 0 && contentBaseSize.height > 0) {
-            
-            // Calculate the bounding box of all highlighted positions
+
             val posSet = searchHighlightPositions.toSet()
             val matchRects = textBoundsNormalized.filter { (_, tp) ->
                 posSet.contains(tp)
             }.map { it.first }
-            
+
             if (matchRects.isNotEmpty()) {
-                // Find the center of the bounding box of all highlighted text
                 val minLeft = matchRects.minOf { it.left }
                 val maxRight = matchRects.maxOf { it.right }
                 val minTop = matchRects.minOf { it.top }
                 val maxBottom = matchRects.maxOf { it.bottom }
-                
+
                 val centerX = (minLeft + maxRight) / 2f
                 val centerY = (minTop + maxBottom) / 2f
-                
-                // Convert normalized coordinates to content coordinates (scaled by zoom)
+
                 val contentCenterX = centerX * contentBaseSize.width * zoomFactor
                 val contentCenterY = centerY * contentBaseSize.height * zoomFactor
-                
-                // Calculate the offset needed to center the match in the viewport
+
                 val targetOffsetX = (viewportSize.width / 2f) - contentCenterX
                 val targetOffsetY = (viewportSize.height / 2f) - contentCenterY
-                
-                // Apply clamping to keep content within bounds
+
                 val newOffset = clampPan(
                     viewportSize,
                     contentBaseSize,
                     zoomFactor,
                     Offset(targetOffsetX, targetOffsetY)
                 )
-                
+
                 panOffset = newOffset
             }
         }
@@ -348,17 +328,14 @@ fun PdfMid(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxSize(0.95f)
                 ) {
-                    // No outer verticalScroll; we handle panning ourselves with clamping
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(16.dp),
                         contentAlignment = Alignment.TopCenter
                     ) {
-                        // Calculate aspect ratio
                         val aspectRatio = pageImage.width.toFloat() / pageImage.height.toFloat()
 
-                        // Zoomable container applying scale and translation
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -370,7 +347,6 @@ fun PdfMid(
                                     translationX = panOffset.x,
                                     translationY = panOffset.y
                                 )
-                                // Ctrl+wheel zoom, plain wheel pan only if scaled content exceeds viewport
                                 .pointerInput("ctrl_wheel_zoom_and_pan") {
                                     awaitPointerEventScope {
                                         while (true) {
@@ -405,7 +381,6 @@ fun PdfMid(
                                         }
                                     }
                                 }
-                                // Pinch zoom only (no drag pan)
                                 .pointerInput("pinch_zoom_only") {
                                     detectTransformGestures(panZoomLock = false) { centroid, _, zoom, _ ->
                                         if (zoom != 1f) {
@@ -415,7 +390,6 @@ fun PdfMid(
                                 }
                                 .focusable()
                         ) {
-                            // PDF Image filling width (unscaled; scaling applied by graphicsLayer)
                             Image(
                                 bitmap = pageImage,
                                 contentDescription = "Current Page",
@@ -425,7 +399,6 @@ fun PdfMid(
                                 contentScale = ContentScale.FillWidth
                             )
 
-                            // Text Layer - Canvas for drawing selection highlight only
                             Canvas(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -434,7 +407,7 @@ fun PdfMid(
                                 val canvasWidth = size.width
                                 val canvasHeight = size.height
 
-                                // First: draw search match highlight rectangles in cyan
+                                // Draw search highlights
                                 if (searchHighlightPositions.isNotEmpty()) {
                                     val posSet = searchHighlightPositions.toSet()
                                     val matchRects = textBoundsNormalized.filter { (_, tp) ->
@@ -454,7 +427,7 @@ fun PdfMid(
                                     }
                                 }
 
-                                // Then: draw selected text highlight rectangles in yellow
+                                // Draw text selection highlights
                                 val toDraw = mergeRectsOnLines(selectedRectsNormalized)
                                 toDraw.forEach { nb ->
                                     val left = nb.left * canvasWidth
@@ -469,7 +442,6 @@ fun PdfMid(
                                 }
                             }
 
-                            // Pointer input for text selection - must match canvas size exactly
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -487,14 +459,12 @@ fun PdfMid(
                                                         isSelecting = true
                                                         selectedText = ""
                                                         selectedRectsNormalized = emptyList()
-                                                        // Consume to prevent parent scroll/pan on drag start
                                                         event.changes.forEach { it.consume() }
                                                     }
 
                                                     PointerEventType.Move -> {
                                                         if (isSelecting) {
                                                             selectionEnd = event.changes.first().position
-                                                            // Consume to prevent parent scroll while dragging
                                                             event.changes.forEach { it.consume() }
 
                                                             selectionStart?.let { start ->
@@ -535,7 +505,6 @@ fun PdfMid(
                                                             clipboardManager.setText(AnnotatedString(selectedText))
                                                         }
                                                         isSelecting = false
-                                                        // Keep highlights until next click; clear marquee
                                                         coroutineScope.launch {
                                                             delay(100)
                                                             selectionStart = null
@@ -546,10 +515,10 @@ fun PdfMid(
                                             }
                                         }
                                     }
-                                        )
-                                    }
-                                }
-                            }
+                            )
+                        }
+                    }
+                }
             } else {
                 JText(
                     text = "No page to display",
@@ -558,56 +527,49 @@ fun PdfMid(
                 )
             }
 
-            // Rotation, zoom and fullscreen controls - positioned on top layer
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .background(
-                        cs.surface.copy(alpha = 0.9f),
-                        RoundedCornerShape(8.dp)
-                    )
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Rotation controls
-                IconButton(
-                    onClick = onRotateCounterClockwise
+            // Only show floating toolbar in fullscreen mode or when showToolbar is true
+            if (showToolbar && isFullscreen) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                        .background(
+                            cs.surface.copy(alpha = 0.9f),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.RotateLeft, "Rotate Left")
-                }
+                    IconButton(onClick = onRotateCounterClockwise) {
+                        Icon(Icons.AutoMirrored.Filled.RotateLeft, "Rotate Left")
+                    }
 
-                IconButton(
-                    onClick = onRotateClockwise
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.RotateRight, "Rotate Right")
-                }
+                    IconButton(onClick = onRotateClockwise) {
+                        Icon(Icons.AutoMirrored.Filled.RotateRight, "Rotate Right")
+                    }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
 
-                // Zoom controls
-                IconButton(onClick = { zoomOutStep() }, enabled = zoomFactor > minZoom + 1e-4f) {
-                    Icon(Icons.Filled.ZoomOut, "Zoom Out")
-                }
-                JText(text = "${(zoomFactor * 100).toInt()}%")
-                IconButton(onClick = { zoomInStep() }) {
-                    Icon(Icons.Filled.ZoomIn, "Zoom In")
-                }
-                IconButton(onClick = { resetZoom() }) {
-                    Icon(Icons.Outlined.RestartAlt, "Reset Zoom")
-                }
+                    IconButton(onClick = { zoomOutStep() }, enabled = zoomFactor > minZoom + 1e-4f) {
+                        Icon(Icons.Filled.ZoomOut, "Zoom Out")
+                    }
+                    JText(text = "${(zoomFactor * 100).toInt()}%")
+                    IconButton(onClick = { zoomInStep() }) {
+                        Icon(Icons.Filled.ZoomIn, "Zoom In")
+                    }
+                    IconButton(onClick = { resetZoom() }) {
+                        Icon(Icons.Outlined.RestartAlt, "Reset Zoom")
+                    }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
 
-                // Fullscreen toggle
-                IconButton(
-                    onClick = onToggleFullscreen
-                ) {
-                    Icon(
-                        imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                        contentDescription = if (isFullscreen) "Exit Fullscreen" else "Enter Fullscreen"
-                    )
+                    IconButton(onClick = onToggleFullscreen) {
+                        Icon(
+                            imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = if (isFullscreen) "Exit Fullscreen" else "Enter Fullscreen"
+                        )
+                    }
                 }
             }
         }

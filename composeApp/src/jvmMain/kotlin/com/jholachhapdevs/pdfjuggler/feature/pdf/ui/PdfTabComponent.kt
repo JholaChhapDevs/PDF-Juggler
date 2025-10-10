@@ -26,6 +26,7 @@ import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.AdvancedPrintOptio
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.PrintProgressDialog
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.TabBar
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SplitViewComponent
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.PdfDisplayArea
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.TabScreenModel
 import com.jholachhapdevs.pdfjuggler.service.PdfGenerationService
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +44,7 @@ fun PdfTabComponent(
     var showPrintOptionsDialog by remember { mutableStateOf(false) }
     var showProgressDialog by remember { mutableStateOf(false) }
     var progressMessage by remember { mutableStateOf("Printing...") }
+    var isSearchVisible by remember { mutableStateOf(false) }
 
     val pdfGenerationService = remember { PdfGenerationService() }
 
@@ -63,6 +65,9 @@ fun PdfTabComponent(
             }
         }
 
+        // Get current tab model for toolbar controls
+        val currentTabModel = model.getCurrentTabModel()
+
         Scaffold(
             topBar = {
                 TabBar(
@@ -74,7 +79,18 @@ fun PdfTabComponent(
                     isSplitViewEnabled = model.isSplitViewEnabled,
                     onToggleSplitView = { model.toggleSplitView() },
                     isAiChatEnabled = model.isAiChatEnabled,
-                    onToggleAiChat = { model.toggleAiChat() }
+                    onToggleAiChat = { model.toggleAiChat() },
+                    // PDF Viewer controls
+                    zoomFactor = currentTabModel?.currentZoom ?: 1f,
+                    minZoom = 0.25f,
+                    isFullscreen = currentTabModel?.isFullscreen ?: false,
+                    onZoomIn = { currentTabModel?.zoomIn() },
+                    onZoomOut = { currentTabModel?.zoomOut() },
+                    onResetZoom = { currentTabModel?.resetZoom() },
+                    onRotateClockwise = { currentTabModel?.rotateClockwise() },
+                    onRotateCounterClockwise = { currentTabModel?.rotateCounterClockwise() },
+                    onToggleFullscreen = { currentTabModel?.toggleFullscreen() },
+                    onSearchClick = { isSearchVisible = !isSearchVisible }
                 )
             }
         ) { padding ->
@@ -94,7 +110,6 @@ fun PdfTabComponent(
                     )
                 } else if (model.isAiChatEnabled) {
                     // AI chat mode - show PDF with AI chat panel
-                    val currentTabModel = model.getCurrentTabModel()
                     if (currentTabModel != null) {
                         // Create AiScreenModel for the current tab
                         val remote = remember { GeminiRemoteDataSource() }
@@ -106,17 +121,28 @@ fun PdfTabComponent(
                                 initialSelectedPageIndex = currentTabModel.selectedPageIndex
                             )
                         }
-                        
-                        AiChatPdfComponent(
-                            tabScreenModel = currentTabModel,
-                            aiScreenModel = aiScreenModel
+
+                        PdfDisplayArea(
+                            model = currentTabModel,
+                            aiScreenModel = aiScreenModel,
+                            isSearchVisible = isSearchVisible,
+                            onSearchVisibilityChange = { isSearchVisible = it }
                         )
                     } else {
                         CurrentTab()
                     }
                 } else {
                     // Normal single view mode
-                    CurrentTab()
+                    if (currentTabModel != null) {
+                        PdfDisplayArea(
+                            model = currentTabModel,
+                            aiScreenModel = null,
+                            isSearchVisible = isSearchVisible,
+                            onSearchVisibilityChange = { isSearchVisible = it }
+                        )
+                    } else {
+                        CurrentTab()
+                    }
                 }
             }
         }
@@ -126,16 +152,16 @@ fun PdfTabComponent(
                 onDismiss = { showPrintOptionsDialog = false },
                 onConfirm = { printOptions ->
                     showPrintOptionsDialog = false
-                    val currentTabModel = model.getCurrentTabModel()
+                    val tabModel = model.getCurrentTabModel()
 
-                    if (currentTabModel != null) {
+                    if (tabModel != null) {
                         showProgressDialog = true
                         progressMessage = "Printing..."
 
                         scope.launch(Dispatchers.IO) {
                             try {
                                 pdfGenerationService.generateAndPrint(
-                                    sourcePath = currentTabModel.pdfFile.path,
+                                    sourcePath = tabModel.pdfFile.path,
                                     options = printOptions,
                                     copies = 1,
                                     duplex = false
@@ -156,7 +182,6 @@ fun PdfTabComponent(
                                 e.printStackTrace()
                             }
                         }
-                    } else {
                     }
                 }
             )
