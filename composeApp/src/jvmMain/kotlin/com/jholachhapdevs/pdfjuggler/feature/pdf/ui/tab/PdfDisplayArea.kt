@@ -1,21 +1,39 @@
 package com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.SaveAs
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveDialog
-import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveResultDialog
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfLeft
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfMid
 
@@ -24,20 +42,18 @@ fun PdfDisplayArea(
     model: TabScreenModel
 ) {
     val listState = rememberLazyListState()
-    var showSaveDialog by remember { mutableStateOf(false) }
     var showSaveAsDialog by remember { mutableStateOf(false) }
 
-    // When this tab becomes active (composed), ensure the selected page is scrolled to top.
+    // Keep left pane scrolled to the selected page
     LaunchedEffect(model.pdfFile.path) {
         if (model.thumbnails.isNotEmpty()) {
             val idx = model.selectedPageIndex.coerceIn(0, model.thumbnails.lastIndex)
             listState.scrollToItem(idx, 0)
         }
     }
-    if(!model.isLoading){
-        println(model.tableOfContent)
-    }
-    
+
+
+
     if (model.isLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -47,7 +63,6 @@ fun PdfDisplayArea(
         }
     } else {
         Column(Modifier.fillMaxSize()) {
-            // Save Controls Bar (shown when there are page changes)
             if (model.hasPageChanges) {
                 Card(
                     modifier = Modifier
@@ -65,7 +80,6 @@ fun PdfDisplayArea(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Status text
                         Row(
                             modifier = Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically,
@@ -77,7 +91,7 @@ fun PdfDisplayArea(
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
-                            
+
                             if (model.isSaving) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
@@ -86,12 +100,10 @@ fun PdfDisplayArea(
                                 )
                             }
                         }
-                        
-                        // Action buttons
+
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Reset button
                             OutlinedButton(
                                 onClick = { model.resetPageOrder() },
                                 enabled = !model.isSaving
@@ -104,8 +116,7 @@ fun PdfDisplayArea(
                                 Spacer(Modifier.width(4.dp))
                                 JText("Reset")
                             }
-                            
-                            // Save As button
+
                             Button(
                                 onClick = { showSaveAsDialog = true },
                                 enabled = !model.isSaving
@@ -122,53 +133,35 @@ fun PdfDisplayArea(
                     }
                 }
             }
-            
-            // Main content
+
             Row(Modifier.fillMaxSize()) {
-                // Hide left pane when in fullscreen mode
-                if (!model.isFullscreen) {
-                    PdfLeft(
-                        modifier = Modifier.weight(0.15f).fillMaxSize(),
-                        thumbnails = model.thumbnails,
-                        selectedIndex = model.selectedPageIndex,
-                        onThumbnailClick = { model.selectPage(it) },
-                        onMovePageUp = { model.movePageUp(it) },
-                        onMovePageDown = { model.movePageDown(it) },
-                        hasPageChanges = model.hasPageChanges,
-                        listState = listState
-                    )
-                }
-               PdfMid(
-                    modifier = Modifier.weight(if (model.isFullscreen) 1f else 0.85f).fillMaxSize(),
+                PdfLeft(
+                    modifier = Modifier.weight(0.15f).fillMaxSize(),
+                    thumbnails = model.thumbnails,
+                    tableOfContents = model.tableOfContent,
+                    bookmarks = model.bookmarks,
+                    selectedIndex = model.selectedPageIndex,
+                    onThumbnailClick = { model.selectPage(it) },
+                    onMovePageUp = { model.movePageUp(it) },
+                    onMovePageDown = { model.movePageDown(it) },
+                    onAddBookmark = { bookmark -> model.addBookmark(bookmark) },
+                    onRemoveBookmark = { index -> model.removeBookmark(index) },
+                    onRemoveBookmarkForPage = { pageIndex -> model.removeBookmarkForPage(pageIndex) },
+                    onSaveBookmarksToMetadata = { model.saveBookmarksToMetadata() },
+                    hasPageChanges = model.hasPageChanges,
+                    hasUnsavedBookmarks = model.hasUnsavedBookmarks,
+                    listState = listState
+                )
+
+                PdfMid(
+                    modifier = Modifier.weight(0.85f).fillMaxSize(),
                     pageImage = model.currentPageImage,
-                    textData = model.allTextDataWithCoordinates[model.selectedPageIndex] ?: emptyList(),
-                    rotation = model.currentRotation,
-                    isFullscreen = model.isFullscreen,
-                    onTextSelected = { selectedText ->
-                        // Handle selected text
-                        println("Selected text: $selectedText")
-                    },
-                    onZoomChanged = { zoomFactor ->
-                        model.onZoomChanged(zoomFactor)
-                    },
-                    onViewportChanged = { viewport ->
-                        model.onViewportChanged(viewport)
-                    },
-                    onRotateClockwise = {
-                        model.rotateClockwise()
-                    },
-                    onRotateCounterClockwise = {
-                        model.rotateCounterClockwise()
-                    },
-                    onToggleFullscreen = {
-                        model.toggleFullscreen()
-                    }
+                    textData = model.allTextDataWithCoordinates[model.selectedPageIndex] ?: emptyList()
                 )
             }
         }
     }
-    
-    // Save dialogs
+
     SaveDialog(
         isOpen = showSaveAsDialog,
         currentFileName = model.pdfFile.path,
@@ -179,11 +172,5 @@ fun PdfDisplayArea(
             model.savePdfAs(path)
         },
         onValidatePath = { path -> model.validateSavePath(path) }
-    )
-    
-    // Save result dialog
-    SaveResultDialog(
-        result = model.saveResult,
-        onDismiss = { model.clearSaveResult() }
     )
 }

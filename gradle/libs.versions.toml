@@ -64,7 +64,7 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 
 
 # apache PdfBox
-pdfbox = { module = "org.apache.pdfbox:pdfbox", version = "2.0.29" }
+pdfbox = { module = "org.apache.pdfbox:pdfbox", version = "2.0.27" }
 
 [plugins]
 composeHotReload = { id = "org.jetbrains.compose.hot-reload", version.ref = "composeHotReload" }

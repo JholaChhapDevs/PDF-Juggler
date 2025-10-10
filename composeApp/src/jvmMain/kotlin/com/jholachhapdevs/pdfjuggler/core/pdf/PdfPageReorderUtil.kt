@@ -240,7 +240,8 @@ class PdfPageReorderUtil {
 sealed class SaveResult {
     data class Success(
         val outputPath: String,
-        val pageCount: Int
+        val pageCount: Int,
+        val message: String? = null
     ) : SaveResult()
     
     data class Error(
