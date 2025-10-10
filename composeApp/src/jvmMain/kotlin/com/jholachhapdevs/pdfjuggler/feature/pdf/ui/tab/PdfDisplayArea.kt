@@ -341,7 +341,11 @@ fun PdfDisplayArea(
                         searchHighlightPositions = model.currentMatchForDisplayedPage(),
                         scrollToMatchTrigger = model.scrollToMatchTrigger,
                         pageIndex = originalPageIndex,
-                        showToolbar = false // Toolbar is now in the top bar
+                        showToolbar = false,
+                        externalZoom = model.currentZoom,
+                        onZoomIn = { model.zoomIn() },
+                        onZoomOut = { model.zoomOut() },
+                        onResetZoom = { model.resetZoom() }
                     )
 
                     // AI Chat panel (only show when enabled and not in fullscreen)

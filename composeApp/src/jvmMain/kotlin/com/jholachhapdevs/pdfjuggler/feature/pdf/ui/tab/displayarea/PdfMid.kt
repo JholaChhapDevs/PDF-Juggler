@@ -55,7 +55,11 @@ fun PdfMid(
     searchHighlightPositions: List<TextPositionData> = emptyList(),
     scrollToMatchTrigger: Int = 0,
     pageIndex: Int = 0,
-    showToolbar: Boolean = true // New parameter to control toolbar visibility
+    showToolbar: Boolean = true,
+    externalZoom: Float = 1f,
+    onZoomIn: () -> Unit = {},
+    onZoomOut: () -> Unit = {},
+    onResetZoom: () -> Unit = {}
 ) {
     val cs = MaterialTheme.colorScheme
     val clipboardManager = LocalClipboardManager.current
@@ -215,8 +219,8 @@ fun PdfMid(
         normalized
     }
 
-    // Zoom & Pan state
-    var zoomFactor by remember { mutableStateOf(1f) }
+    // Use external zoom instead of local state
+    val zoomFactor = externalZoom
     var panOffset by remember { mutableStateOf(Offset.Zero) }
     var contentBaseSize by remember { mutableStateOf(IntSize.Zero) }
 
@@ -225,10 +229,7 @@ fun PdfMid(
 
     LaunchedEffect(zoomFactor) {
         if (zoomFactor < minZoom) {
-            zoomFactor = minZoom
             panOffset = Offset.Zero
-        } else if (zoomFactor > maxZoom) {
-            zoomFactor = maxZoom
         }
         onZoomChanged(zoomFactor)
     }
@@ -248,21 +249,26 @@ fun PdfMid(
         val oldZoom = zoomFactor
         val nz = newZoom.coerceIn(minZoom, maxZoom)
         if (contentBaseSize.width == 0 || contentBaseSize.height == 0) {
-            zoomFactor = nz; return
+            return
         }
         val t = panOffset
         val tx = anchorInView.x - ((anchorInView.x - t.x) / oldZoom) * nz
         val ty = anchorInView.y - ((anchorInView.y - t.y) / oldZoom) * nz
         panOffset = clampPan(viewportSize, contentBaseSize, nz, Offset(tx, ty))
-        zoomFactor = nz
     }
 
-    fun resetZoom() {
-        zoomFactor = 1f
+    fun resetZoomLocal() {
         panOffset = Offset.Zero
+        onResetZoom()
     }
-    fun zoomInStep() { setZoomAroundAnchor(zoomFactor * 1.25f, Offset(viewportSize.width/2f, viewportSize.height/2f)) }
-    fun zoomOutStep() { setZoomAroundAnchor(zoomFactor / 1.25f, Offset(viewportSize.width/2f, viewportSize.height/2f)) }
+
+    fun zoomInStep() {
+        onZoomIn()
+    }
+
+    fun zoomOutStep() {
+        onZoomOut()
+    }
 
     // Auto-scroll to search match
     LaunchedEffect(scrollToMatchTrigger, searchHighlightPositions, viewportSize, contentBaseSize) {
@@ -313,7 +319,7 @@ fun PdfMid(
                         when (event.key) {
                             Key.Equals, Key.Plus, Key.NumPadAdd -> { zoomInStep(); true }
                             Key.Minus, Key.NumPadSubtract -> { zoomOutStep(); true }
-                            Key.Zero, Key.NumPad0 -> { resetZoom(); true }
+                            Key.Zero, Key.NumPad0 -> { resetZoomLocal(); true }
                             else -> false
                         }
                     } else false
@@ -358,6 +364,7 @@ fun PdfMid(
                                                     val factor = if (scroll.y > 0) 0.9f else 1.1f
                                                     val nz = (zoomFactor * factor)
                                                     setZoomAroundAnchor(nz, change.position)
+                                                    if (scroll.y > 0) onZoomOut() else onZoomIn()
                                                     change.consume()
                                                 } else {
                                                     val scaledW = contentBaseSize.width * zoomFactor
@@ -385,6 +392,7 @@ fun PdfMid(
                                     detectTransformGestures(panZoomLock = false) { centroid, _, zoom, _ ->
                                         if (zoom != 1f) {
                                             setZoomAroundAnchor(zoomFactor * zoom, centroid)
+                                            if (zoom > 1f) onZoomIn() else onZoomOut()
                                         }
                                     }
                                 }
@@ -551,14 +559,14 @@ fun PdfMid(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    IconButton(onClick = { zoomOutStep() }, enabled = zoomFactor > minZoom + 1e-4f) {
+                    IconButton(onClick = { onZoomOut() }, enabled = zoomFactor > minZoom + 1e-4f) {
                         Icon(Icons.Filled.ZoomOut, "Zoom Out")
                     }
                     JText(text = "${(zoomFactor * 100).toInt()}%")
-                    IconButton(onClick = { zoomInStep() }) {
+                    IconButton(onClick = { onZoomIn() }) {
                         Icon(Icons.Filled.ZoomIn, "Zoom In")
                     }
-                    IconButton(onClick = { resetZoom() }) {
+                    IconButton(onClick = { onResetZoom() }) {
                         Icon(Icons.Outlined.RestartAlt, "Reset Zoom")
                     }
 
