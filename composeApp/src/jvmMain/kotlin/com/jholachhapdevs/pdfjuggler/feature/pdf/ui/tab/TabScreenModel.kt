@@ -14,15 +14,17 @@ import com.jholachhapdevs.pdfjuggler.core.pdf.SaveResult
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TableOfContentData
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.PdfFile
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TextPositionData
+import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.BookmarkData
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.PositionAwareTextStripper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.apache.pdfbox.pdmodel.PDDocument
+import org.apache.pdfbox.pdmodel.PDDocumentInformation
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination
-import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageXYZDestination
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem
 import org.apache.pdfbox.rendering.ImageType
 import org.apache.pdfbox.rendering.PDFRenderer
@@ -30,6 +32,7 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.imageio.ImageIO
+import androidx.compose.ui.geometry.Size
 
 class TabScreenModel(
     val pdfFile: PdfFile,
@@ -41,6 +44,18 @@ class TabScreenModel(
     
     // PDF page reordering utility
     private val pdfReorderUtil = PdfPageReorderUtil()
+
+    // --- Search state ---
+    data class SearchMatch(
+        val pageIndex: Int, // original page index
+        val positions: List<TextPositionData>
+    )
+    var searchQuery by mutableStateOf("")
+        private set
+    var searchMatches by mutableStateOf<List<SearchMatch>>(emptyList())
+        private set
+    var currentSearchIndex by mutableStateOf(-1)
+        private set
 
     var thumbnails by mutableStateOf<List<ImageBitmap>>(emptyList())
         private set
@@ -69,7 +84,10 @@ class TabScreenModel(
     private var currentZoom by mutableStateOf(1f)
     private var currentViewport by mutableStateOf(IntSize.Zero)
     
-    // Current rotation angle (0, 90, 180, 270 degrees)
+    // Auto-scroll trigger for search matches
+    private var _scrollToMatchTrigger by mutableStateOf(0)
+    val scrollToMatchTrigger: Int get() = _scrollToMatchTrigger
+    
     var currentRotation by mutableStateOf(0f)
         private set
     
@@ -92,6 +110,17 @@ class TabScreenModel(
     var saveResult by mutableStateOf<SaveResult?>(null)
         private set
 
+    // Bookmarks state
+    var bookmarks by mutableStateOf<List<BookmarkData>>(emptyList())
+        private set
+
+    var hasUnsavedBookmarks by mutableStateOf(false)
+        private set
+
+    // Map of page index -> page size in PDF points (mediaBox width/height)
+    var pageSizesPoints by mutableStateOf<Map<Int, Size>>(emptyMap())
+        private set
+
     init {
         loadPdf()
     }
@@ -108,6 +137,18 @@ class TabScreenModel(
                 allTextDataWithCoordinates = extractAllTextData(pdfFile.path)
                 allTextData = getTextOnlyData()
                 tableOfContent = getTableOfContents(pdfFile.path)
+                // Load bookmarks from PDF metadata
+                bookmarks = loadBookmarksFromMetadata(pdfFile.path)
+                // Extract page sizes in points for proper coordinate mapping
+                pageSizesPoints = extractPageSizesPoints(pdfFile.path)
+
+                // Clear previous search (if any) and recompute based on current query
+                if (searchQuery.isNotBlank()) {
+                    recomputeSearchMatches()
+                } else {
+                    clearSearch()
+                }
+
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -128,6 +169,360 @@ class TabScreenModel(
                 e.printStackTrace()
             }
         }
+    }
+
+    // ============ Bookmark Management Functions ============
+
+    /**
+     * Add a new bookmark
+     */
+    fun addBookmark(bookmark: BookmarkData) {
+        // Check if bookmark already exists for this page
+        val existingIndex = bookmarks.indexOfFirst { it.pageIndex == bookmark.pageIndex }
+
+        if (existingIndex != -1) {
+            // Update existing bookmark
+            val updatedBookmarks = bookmarks.toMutableList()
+            updatedBookmarks[existingIndex] = bookmark
+            bookmarks = updatedBookmarks
+        } else {
+            // Add new bookmark
+            bookmarks = bookmarks + bookmark
+        }
+
+        hasUnsavedBookmarks = true
+    }
+
+    /**
+     * Remove a bookmark by index in the bookmarks list
+     */
+    fun removeBookmark(bookmarkIndex: Int) {
+        if (bookmarkIndex >= 0 && bookmarkIndex < bookmarks.size) {
+            bookmarks = bookmarks.toMutableList().apply {
+                removeAt(bookmarkIndex)
+            }
+            hasUnsavedBookmarks = true
+        }
+    }
+
+    /**
+     * Remove bookmark for a specific page
+     */
+    fun removeBookmarkForPage(pageIndex: Int) {
+        bookmarks = bookmarks.filter { it.pageIndex != pageIndex }
+        hasUnsavedBookmarks = true
+    }
+
+    /**
+     * Check if a page has a bookmark
+     */
+    fun isPageBookmarked(pageIndex: Int): Boolean {
+        return bookmarks.any { it.pageIndex == pageIndex }
+    }
+
+    /**
+     * Get bookmark for a specific page
+     */
+    fun getBookmarkForPage(pageIndex: Int): BookmarkData? {
+        return bookmarks.firstOrNull { it.pageIndex == pageIndex }
+    }
+
+    /**
+     * Save bookmarks to PDF metadata
+     */
+    fun saveBookmarksToMetadata() {
+        screenModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val file = File(pdfFile.path)
+
+                    // Create a temporary file to save to first
+                    val tempFile = File("${file.absolutePath}.tmp")
+
+                    PDDocument.load(file).use { document ->
+                        // Get or create document information
+                        val info = document.documentInformation ?: PDDocumentInformation()
+
+                        // Serialize ALL bookmarks to a custom metadata field
+                        val bookmarksJson = serializeBookmarks(bookmarks)
+
+                        // Debug: Print what we're saving
+                        println("Saving ${bookmarks.size} bookmarks to metadata: $bookmarksJson")
+
+                        info.setCustomMetadataValue("Bookmarks", bookmarksJson)
+
+                        // Update document information
+                        document.documentInformation = info
+
+                        // Save to temporary file first
+                        document.save(tempFile)
+                    }
+
+                    // Replace original file with temp file
+                    if (tempFile.exists()) {
+                        file.delete()
+                        tempFile.renameTo(file)
+                    }
+                }
+
+                hasUnsavedBookmarks = false
+                saveResult = SaveResult.Success(pdfFile.path, bookmarks.size, "${bookmarks.size} bookmark(s) saved successfully")
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                saveResult = SaveResult.Error("Failed to save bookmarks: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Load bookmarks from PDF metadata
+     */
+    private suspend fun loadBookmarksFromMetadata(filePath: String): List<BookmarkData> {
+        return withContext(Dispatchers.IO) {
+            try {
+                PDDocument.load(File(filePath)).use { document ->
+                    val info = document.documentInformation
+                    val bookmarksJson = info?.getCustomMetadataValue("Bookmarks")
+
+                    println("Loading bookmarks from metadata: $bookmarksJson")
+
+                    if (bookmarksJson != null) {
+                        val loadedBookmarks = deserializeBookmarks(bookmarksJson)
+                        println("Loaded ${loadedBookmarks.size} bookmarks")
+                        loadedBookmarks
+                    } else {
+                        println("No bookmarks found in metadata")
+                        emptyList()
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                emptyList()
+            }
+        }
+    }
+
+    /**
+     * Serialize bookmarks to JSON string
+     */
+    private fun serializeBookmarks(bookmarks: List<BookmarkData>): String {
+        // Simple JSON serialization (you can use a proper JSON library like kotlinx.serialization)
+        val bookmarksArray = bookmarks.joinToString(",") { bookmark ->
+            """{"pageIndex":${bookmark.pageIndex},"title":"${escapeJson(bookmark.title)}","note":"${escapeJson(bookmark.note)}"}"""
+        }
+        return "[$bookmarksArray]"
+    }
+
+    /**
+     * Deserialize bookmarks from JSON string
+     */
+    private fun deserializeBookmarks(json: String): List<BookmarkData> {
+        try {
+            val bookmarks = mutableListOf<BookmarkData>()
+
+            // Remove brackets and trim
+            val cleaned = json.trim().removeSurrounding("[", "]").trim()
+            if (cleaned.isEmpty()) return emptyList()
+
+            // More robust parsing: Split by "},{"
+            val bookmarkStrings = if (cleaned.contains("},{")) {
+                cleaned.split("},{").map {
+                    var s = it.trim()
+                    if (!s.startsWith("{")) s = "{$s"
+                    if (!s.endsWith("}")) s = "$s}"
+                    s
+                }
+            } else {
+                listOf(if (cleaned.startsWith("{")) cleaned else "{$cleaned}")
+            }
+
+            for (bookmarkStr in bookmarkStrings) {
+                try {
+                    // Extract values using regex for more reliable parsing
+                    val pageIndexMatch = """"pageIndex"\s*:\s*(\d+)""".toRegex().find(bookmarkStr)
+                    val titleMatch = """"title"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"""".toRegex().find(bookmarkStr)
+                    val noteMatch = """"note"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"""".toRegex().find(bookmarkStr)
+
+                    val pageIndex = pageIndexMatch?.groupValues?.get(1)?.toIntOrNull() ?: continue
+                    val title = titleMatch?.groupValues?.get(1)?.let { unescapeJson(it) } ?: "Bookmark"
+                    val note = noteMatch?.groupValues?.get(1)?.let { unescapeJson(it) } ?: ""
+
+                    bookmarks.add(BookmarkData(pageIndex, title, note))
+                    println("Parsed bookmark: pageIndex=$pageIndex, title=$title, note=$note")
+                } catch (e: Exception) {
+                    println("Failed to parse bookmark: $bookmarkStr")
+                    e.printStackTrace()
+                }
+            }
+
+            return bookmarks
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return emptyList()
+        }
+    }
+
+    /**
+     * Unescape JSON string
+     */
+    private fun unescapeJson(text: String): String {
+        return text
+            .replace("\\\\", "\\")
+            .replace("\\\"", "\"")
+            .replace("\\n", "\n")
+            .replace("\\r", "\r")
+            .replace("\\t", "\t")
+    }
+
+    /**
+     * Escape special characters for JSON
+     */
+    private fun escapeJson(text: String): String {
+        return text
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+    }
+
+    /**
+     * Clear all bookmarks
+     */
+    fun clearAllBookmarks() {
+        bookmarks = emptyList()
+        hasUnsavedBookmarks = true
+    }
+
+    /**
+     * Export bookmarks to a text file
+     */
+    fun exportBookmarksToFile(outputPath: String) {
+        screenModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val content = StringBuilder()
+                    content.appendLine("PDF Bookmarks - ${pdfFile.name}")
+                    content.appendLine("=" .repeat(50))
+                    content.appendLine()
+
+                    bookmarks.sortedBy { it.pageIndex }.forEach { bookmark ->
+                        content.appendLine("Page ${bookmark.pageIndex + 1}: ${bookmark.title}")
+                        if (bookmark.note.isNotEmpty()) {
+                            content.appendLine("  Note: ${bookmark.note}")
+                        }
+                        content.appendLine()
+                    }
+
+                    File(outputPath).writeText(content.toString())
+                }
+
+                saveResult = SaveResult.Success(outputPath, bookmarks.size, "Bookmarks exported successfully")
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                saveResult = SaveResult.Error("Failed to export bookmarks: ${e.message}")
+            }
+        }
+    }
+
+    // ============ End Bookmark Management Functions ============
+
+    // --- Search API ---
+    fun updateSearchQuery(query: String) {
+        searchQuery = query
+        if (query.isBlank()) {
+            clearSearch()
+        } else {
+            recomputeSearchMatches()
+        }
+    }
+
+    fun clearSearch() {
+        searchMatches = emptyList()
+        currentSearchIndex = -1
+    }
+
+    private fun recomputeSearchMatches() {
+        val q = searchQuery.trim().lowercase()
+        if (q.isEmpty()) {
+            clearSearch(); return
+        }
+        val matches = mutableListOf<SearchMatch>()
+        for (originalPage in 0 until totalPages) {
+            val items = allTextDataWithCoordinates[originalPage] ?: continue
+            var i = 0
+            while (i < items.size) {
+                var k = 0
+                var j = i
+                val collected = mutableListOf<TextPositionData>()
+                while (j < items.size && k < q.length) {
+                    val t = items[j].text.lowercase()
+                    val remaining = q.substring(k)
+                    if (remaining.startsWith(t)) {
+                        collected.add(items[j])
+                        k += t.length
+                        j++
+                    } else {
+                        break
+                    }
+                }
+                if (k == q.length && collected.isNotEmpty()) {
+                    matches.add(SearchMatch(originalPage, collected.toList()))
+                    i = j
+                } else {
+                    i++
+                }
+            }
+        }
+        searchMatches = matches
+        currentSearchIndex = if (matches.isNotEmpty()) 0 else -1
+        // If first match exists and is on another page, navigate there
+        val first = matches.firstOrNull()
+        if (first != null) {
+            val displayIdx = pageOrder.indexOf(first.pageIndex)
+            if (displayIdx >= 0) selectPage(displayIdx)
+        }
+    }
+
+    fun goToNextMatch() {
+        if (searchMatches.isEmpty()) return
+        currentSearchIndex = (currentSearchIndex + 1) % searchMatches.size
+        val match = searchMatches[currentSearchIndex]
+        val displayIdx = pageOrder.indexOf(match.pageIndex)
+        if (displayIdx >= 0) {
+            selectPage(displayIdx)
+            scrollToCurrentMatch()
+        }
+    }
+    
+    fun goToPreviousMatch() {
+        if (searchMatches.isEmpty()) return
+        currentSearchIndex = if (currentSearchIndex <= 0) {
+            searchMatches.size - 1
+        } else {
+            currentSearchIndex - 1
+        }
+        val match = searchMatches[currentSearchIndex]
+        val displayIdx = pageOrder.indexOf(match.pageIndex)
+        if (displayIdx >= 0) {
+            selectPage(displayIdx)
+            scrollToCurrentMatch()
+        }
+    }
+    
+    private fun scrollToCurrentMatch() {
+        // Trigger scroll to the current search match by incrementing the trigger
+        _scrollToMatchTrigger++
+    }
+
+    fun currentMatchForDisplayedPage(): List<TextPositionData> {
+        val idx = currentSearchIndex
+        if (idx < 0 || idx >= searchMatches.size) return emptyList()
+        val match = searchMatches[idx]
+        val displayedOriginal = getOriginalPageIndex(selectedPageIndex)
+        return if (match.pageIndex == displayedOriginal) match.positions else emptyList()
     }
     
     /**
@@ -366,12 +761,13 @@ class TabScreenModel(
             displayIndex
         }
     }
-    
+
     /**
-     * Get the display index for a given original page index
+     * Helper to fetch the page size (in PDF points) for the given display index.
      */
-    fun getDisplayIndex(originalPageIndex: Int): Int {
-        return pageOrder.indexOf(originalPageIndex)
+    fun getPageSizePointsForDisplayIndex(displayIndex: Int): Size? {
+        val original = getOriginalPageIndex(displayIndex)
+        return pageSizesPoints[original]
     }
     
     /**
@@ -582,6 +978,19 @@ class TabScreenModel(
         }
     }
 
+    // Extract page sizes (MediaBox width/height) in PDF points for each page
+    private fun extractPageSizesPoints(filePath: String): Map<Int, Size> {
+        PDDocument.load(File(filePath)).use { document ->
+            val sizes = mutableMapOf<Int, Size>()
+            for (i in 0 until document.numberOfPages) {
+                val page = document.getPage(i)
+                val mb = page.mediaBox
+                sizes[i] = Size(mb.width, mb.height)
+            }
+            return sizes
+        }
+    }
+
     private suspend fun getTableOfContents(filePath: String): List<TableOfContentData> = withContext(Dispatchers.IO) {
         PDDocument.load(File(filePath)).use { document ->
             val outline: PDDocumentOutline? = document.documentCatalog.documentOutline
@@ -635,4 +1044,5 @@ class TabScreenModel(
             children = children
         )
     }
+
 }

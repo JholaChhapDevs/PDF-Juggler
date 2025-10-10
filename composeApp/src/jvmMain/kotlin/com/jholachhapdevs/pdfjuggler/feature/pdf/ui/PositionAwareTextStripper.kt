@@ -24,10 +24,10 @@ class PositionAwareTextStripper : PDFTextStripper() {
 
         val data = TextPositionData(
             text = text.unicode,
-            x = text.x,
-            y = text.y,
-            width = text.width,
-            height = text.height
+            x = text.xDirAdj,
+            y = text.yDirAdj,
+            width = text.widthDirAdj,
+            height = text.heightDir
         )
 
         allPageTextData
