@@ -14,11 +14,13 @@ import com.jholachhapdevs.pdfjuggler.core.pdf.SaveResult
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TableOfContentData
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.PdfFile
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TextPositionData
+import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.BookmarkData
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.PositionAwareTextStripper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.apache.pdfbox.pdmodel.PDDocument
+import org.apache.pdfbox.pdmodel.PDDocumentInformation
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageXYZDestination
@@ -36,10 +38,10 @@ class TabScreenModel(
     val pdfFile: PdfFile,
     private val window: java.awt.Window? = null
 ) : ScreenModel {
-    
+
     // High-quality PDF renderer
     private val pdfRenderer = HighQualityPdfRenderer()
-    
+
     // PDF page reordering utility
     private val pdfReorderUtil = PdfPageReorderUtil()
 
@@ -77,7 +79,7 @@ class TabScreenModel(
         private set
     var tableOfContent by mutableStateOf<List<TableOfContentData>>(emptyList())
         private set
-        
+
     // Current zoom and viewport state for adaptive rendering
     private var currentZoom by mutableStateOf(1f)
     private var currentViewport by mutableStateOf(IntSize.Zero)
@@ -88,7 +90,7 @@ class TabScreenModel(
     
     var currentRotation by mutableStateOf(0f)
         private set
-    
+
     // Fullscreen state
     var isFullscreen by mutableStateOf(false)
         private set
@@ -96,20 +98,27 @@ class TabScreenModel(
     // Page ordering - maps display order to original page indices
     var pageOrder by mutableStateOf<List<Int>>(emptyList())
         private set
-    
+
     // Track if pages have been reordered
     var hasPageChanges by mutableStateOf(false)
         private set
-    
+
     // Save operation state
     var isSaving by mutableStateOf(false)
         private set
-        
+
     var saveResult by mutableStateOf<SaveResult?>(null)
         private set
 
+
     // Map of page index -> page size in PDF points (mediaBox width/height)
     var pageSizesPoints by mutableStateOf<Map<Int, Size>>(emptyMap())
+
+    // Bookmarks state
+    var bookmarks by mutableStateOf<List<BookmarkData>>(emptyList())
+        private set
+
+    var hasUnsavedBookmarks by mutableStateOf(false)
         private set
 
     init {
@@ -138,6 +147,8 @@ class TabScreenModel(
                     clearSearch()
                 }
 
+                // Load bookmarks from PDF metadata
+                bookmarks = loadBookmarksFromMetadata(pdfFile.path)
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
@@ -256,6 +267,264 @@ class TabScreenModel(
         return if (match.pageIndex == displayedOriginal) match.positions else emptyList()
     }
     
+    // ============ Bookmark Management Functions ============
+
+    /**
+     * Add a new bookmark
+     */
+    fun addBookmark(bookmark: BookmarkData) {
+        // Check if bookmark already exists for this page
+        val existingIndex = bookmarks.indexOfFirst { it.pageIndex == bookmark.pageIndex }
+
+        if (existingIndex != -1) {
+            // Update existing bookmark
+            val updatedBookmarks = bookmarks.toMutableList()
+            updatedBookmarks[existingIndex] = bookmark
+            bookmarks = updatedBookmarks
+        } else {
+            // Add new bookmark
+            bookmarks = bookmarks + bookmark
+        }
+
+        hasUnsavedBookmarks = true
+    }
+
+    /**
+     * Remove a bookmark by index in the bookmarks list
+     */
+    fun removeBookmark(bookmarkIndex: Int) {
+        if (bookmarkIndex >= 0 && bookmarkIndex < bookmarks.size) {
+            bookmarks = bookmarks.toMutableList().apply {
+                removeAt(bookmarkIndex)
+            }
+            hasUnsavedBookmarks = true
+        }
+    }
+
+    /**
+     * Remove bookmark for a specific page
+     */
+    fun removeBookmarkForPage(pageIndex: Int) {
+        bookmarks = bookmarks.filter { it.pageIndex != pageIndex }
+        hasUnsavedBookmarks = true
+    }
+
+    /**
+     * Check if a page has a bookmark
+     */
+    fun isPageBookmarked(pageIndex: Int): Boolean {
+        return bookmarks.any { it.pageIndex == pageIndex }
+    }
+
+    /**
+     * Get bookmark for a specific page
+     */
+    fun getBookmarkForPage(pageIndex: Int): BookmarkData? {
+        return bookmarks.firstOrNull { it.pageIndex == pageIndex }
+    }
+
+    /**
+     * Save bookmarks to PDF metadata
+     */
+    fun saveBookmarksToMetadata() {
+        screenModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val file = File(pdfFile.path)
+
+                    // Create a temporary file to save to first
+                    val tempFile = File("${file.absolutePath}.tmp")
+
+                    PDDocument.load(file).use { document ->
+                        // Get or create document information
+                        val info = document.documentInformation ?: PDDocumentInformation()
+
+                        // Serialize ALL bookmarks to a custom metadata field
+                        val bookmarksJson = serializeBookmarks(bookmarks)
+
+                        // Debug: Print what we're saving
+                        println("Saving ${bookmarks.size} bookmarks to metadata: $bookmarksJson")
+
+                        info.setCustomMetadataValue("Bookmarks", bookmarksJson)
+
+                        // Update document information
+                        document.documentInformation = info
+
+                        // Save to temporary file first
+                        document.save(tempFile)
+                    }
+
+                    // Replace original file with temp file
+                    if (tempFile.exists()) {
+                        file.delete()
+                        tempFile.renameTo(file)
+                    }
+                }
+
+                hasUnsavedBookmarks = false
+                saveResult = SaveResult.Success(pdfFile.path, bookmarks.size, "${bookmarks.size} bookmark(s) saved successfully")
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                saveResult = SaveResult.Error("Failed to save bookmarks: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Load bookmarks from PDF metadata
+     */
+    private suspend fun loadBookmarksFromMetadata(filePath: String): List<BookmarkData> {
+        return withContext(Dispatchers.IO) {
+            try {
+                PDDocument.load(File(filePath)).use { document ->
+                    val info = document.documentInformation
+                    val bookmarksJson = info?.getCustomMetadataValue("Bookmarks")
+
+                    println("Loading bookmarks from metadata: $bookmarksJson")
+
+                    if (bookmarksJson != null) {
+                        val loadedBookmarks = deserializeBookmarks(bookmarksJson)
+                        println("Loaded ${loadedBookmarks.size} bookmarks")
+                        loadedBookmarks
+                    } else {
+                        println("No bookmarks found in metadata")
+                        emptyList()
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                emptyList()
+            }
+        }
+    }
+
+    /**
+     * Serialize bookmarks to JSON string
+     */
+    private fun serializeBookmarks(bookmarks: List<BookmarkData>): String {
+        // Simple JSON serialization (you can use a proper JSON library like kotlinx.serialization)
+        val bookmarksArray = bookmarks.joinToString(",") { bookmark ->
+            """{"pageIndex":${bookmark.pageIndex},"title":"${escapeJson(bookmark.title)}","note":"${escapeJson(bookmark.note)}"}"""
+        }
+        return "[$bookmarksArray]"
+    }
+
+    /**
+     * Deserialize bookmarks from JSON string
+     */
+    private fun deserializeBookmarks(json: String): List<BookmarkData> {
+        try {
+            val bookmarks = mutableListOf<BookmarkData>()
+
+            // Remove brackets and trim
+            val cleaned = json.trim().removeSurrounding("[", "]").trim()
+            if (cleaned.isEmpty()) return emptyList()
+
+            // More robust parsing: Split by "},{"
+            val bookmarkStrings = if (cleaned.contains("},{")) {
+                cleaned.split("},{").map {
+                    var s = it.trim()
+                    if (!s.startsWith("{")) s = "{$s"
+                    if (!s.endsWith("}")) s = "$s}"
+                    s
+                }
+            } else {
+                listOf(if (cleaned.startsWith("{")) cleaned else "{$cleaned}")
+            }
+
+            for (bookmarkStr in bookmarkStrings) {
+                try {
+                    // Extract values using regex for more reliable parsing
+                    val pageIndexMatch = """"pageIndex"\s*:\s*(\d+)""".toRegex().find(bookmarkStr)
+                    val titleMatch = """"title"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"""".toRegex().find(bookmarkStr)
+                    val noteMatch = """"note"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"""".toRegex().find(bookmarkStr)
+
+                    val pageIndex = pageIndexMatch?.groupValues?.get(1)?.toIntOrNull() ?: continue
+                    val title = titleMatch?.groupValues?.get(1)?.let { unescapeJson(it) } ?: "Bookmark"
+                    val note = noteMatch?.groupValues?.get(1)?.let { unescapeJson(it) } ?: ""
+
+                    bookmarks.add(BookmarkData(pageIndex, title, note))
+                    println("Parsed bookmark: pageIndex=$pageIndex, title=$title, note=$note")
+                } catch (e: Exception) {
+                    println("Failed to parse bookmark: $bookmarkStr")
+                    e.printStackTrace()
+                }
+            }
+
+            return bookmarks
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return emptyList()
+        }
+    }
+
+    /**
+     * Unescape JSON string
+     */
+    private fun unescapeJson(text: String): String {
+        return text
+            .replace("\\\\", "\\")
+            .replace("\\\"", "\"")
+            .replace("\\n", "\n")
+            .replace("\\r", "\r")
+            .replace("\\t", "\t")
+    }
+
+    /**
+     * Escape special characters for JSON
+     */
+    private fun escapeJson(text: String): String {
+        return text
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+    }
+
+    /**
+     * Clear all bookmarks
+     */
+    fun clearAllBookmarks() {
+        bookmarks = emptyList()
+        hasUnsavedBookmarks = true
+    }
+
+    /**
+     * Export bookmarks to a text file
+     */
+    fun exportBookmarksToFile(outputPath: String) {
+        screenModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val content = StringBuilder()
+                    content.appendLine("PDF Bookmarks - ${pdfFile.name}")
+                    content.appendLine("=" .repeat(50))
+                    content.appendLine()
+
+                    bookmarks.sortedBy { it.pageIndex }.forEach { bookmark ->
+                        content.appendLine("Page ${bookmark.pageIndex + 1}: ${bookmark.title}")
+                        if (bookmark.note.isNotEmpty()) {
+                            content.appendLine("  Note: ${bookmark.note}")
+                        }
+                        content.appendLine()
+                    }
+
+                    File(outputPath).writeText(content.toString())
+                }
+
+                saveResult = SaveResult.Success(outputPath, bookmarks.size, "Bookmarks exported successfully")
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                saveResult = SaveResult.Error("Failed to export bookmarks: ${e.message}")
+            }
+        }
+    }
+
+    // ============ End Bookmark Management Functions ============
+
     /**
      * Called when zoom level changes to re-render at appropriate quality
      */
@@ -272,7 +541,7 @@ class TabScreenModel(
             }
         }
     }
-    
+
     /**
      * Called when viewport size changes
      */
@@ -289,7 +558,7 @@ class TabScreenModel(
             }
         }
     }
-    
+
     /**
      * Toggle fullscreen mode
      */
@@ -334,7 +603,7 @@ class TabScreenModel(
             }
         }
     }
-    
+
     /**
      * Rotate the current page 90 degrees counter-clockwise
      */
@@ -349,7 +618,7 @@ class TabScreenModel(
             }
         }
     }
-    
+
     /**
      * Reset rotation to 0 degrees
      */
@@ -364,7 +633,7 @@ class TabScreenModel(
             }
         }
     }
-    
+
     /**
      * Move a page up in the order (decrease display position)
      */
@@ -375,13 +644,13 @@ class TabScreenModel(
             val temp = newOrder[displayIndex]
             newOrder[displayIndex] = newOrder[displayIndex - 1]
             newOrder[displayIndex - 1] = temp
-            
+
             pageOrder = newOrder
             hasPageChanges = true
-            
+
             // Update thumbnails to reflect new order
             updateThumbnailOrder()
-            
+
             // If the selected page was moved, update the selection
             if (selectedPageIndex == displayIndex) {
                 selectedPageIndex = displayIndex - 1
@@ -390,7 +659,7 @@ class TabScreenModel(
             }
         }
     }
-    
+
     /**
      * Move a page down in the order (increase display position)
      */
@@ -401,13 +670,13 @@ class TabScreenModel(
             val temp = newOrder[displayIndex]
             newOrder[displayIndex] = newOrder[displayIndex + 1]
             newOrder[displayIndex + 1] = temp
-            
+
             pageOrder = newOrder
             hasPageChanges = true
-            
+
             // Update thumbnails to reflect new order
             updateThumbnailOrder()
-            
+
             // If the selected page was moved, update the selection
             if (selectedPageIndex == displayIndex) {
                 selectedPageIndex = displayIndex + 1
@@ -416,26 +685,26 @@ class TabScreenModel(
             }
         }
     }
-    
+
     /**
      * Move a page to a specific position in the order
      */
     fun movePageToPosition(fromIndex: Int, toIndex: Int) {
-        if (fromIndex == toIndex || fromIndex < 0 || toIndex < 0 || 
+        if (fromIndex == toIndex || fromIndex < 0 || toIndex < 0 ||
             fromIndex >= pageOrder.size || toIndex >= pageOrder.size) {
             return
         }
-        
+
         val newOrder = pageOrder.toMutableList()
         val pageToMove = newOrder.removeAt(fromIndex)
         newOrder.add(toIndex, pageToMove)
-        
+
         pageOrder = newOrder
         hasPageChanges = true
-        
+
         // Update thumbnails to reflect new order
         updateThumbnailOrder()
-        
+
         // Update selected page index if necessary
         when {
             selectedPageIndex == fromIndex -> selectedPageIndex = toIndex
@@ -444,7 +713,7 @@ class TabScreenModel(
             }
         }
     }
-    
+
     /**
      * Update thumbnails order to match page order
      */
@@ -470,7 +739,7 @@ class TabScreenModel(
             }
         }
     }
-    
+
     /**
      * Reset page order to original sequence
      */
@@ -481,7 +750,7 @@ class TabScreenModel(
         // Re-select current page based on original index
         selectPage(selectedPageIndex)
     }
-    
+
     /**
      * Get the original page index for a given display index
      */
@@ -500,31 +769,31 @@ class TabScreenModel(
         val original = getOriginalPageIndex(displayIndex)
         return pageSizesPoints[original]
     }
-    
+
     /**
      * Save the PDF with current page ordering to a new file
      */
     fun savePdfAs(outputPath: String) {
         if (isSaving) return
-        
+
         screenModelScope.launch {
             isSaving = true
             saveResult = null
-            
+
             try {
                 val result = pdfReorderUtil.saveReorderedPdf(
                     inputFilePath = pdfFile.path,
                     outputFilePath = outputPath,
                     pageOrder = pageOrder
                 )
-                
+
                 saveResult = result
-                
+
                 // If save was successful, reset the changes state
                 if (result is SaveResult.Success) {
                     hasPageChanges = false
                 }
-                
+
             } catch (e: Exception) {
                 saveResult = SaveResult.Error("Save failed: ${e.message}")
                 e.printStackTrace()
@@ -533,18 +802,18 @@ class TabScreenModel(
             }
         }
     }
-    
+
     /**
      * Save the PDF with current page ordering, overwriting the original file
      */
     fun savePdf() {
         // Create a temporary file with reordered pages
         val tempOutputPath = "${pdfFile.path}.tmp"
-        
+
         screenModelScope.launch {
             isSaving = true
             saveResult = null
-            
+
             try {
                 // Save to temporary file first
                 val result = pdfReorderUtil.saveReorderedPdf(
@@ -552,19 +821,19 @@ class TabScreenModel(
                     outputFilePath = tempOutputPath,
                     pageOrder = pageOrder
                 )
-                
+
                 if (result is SaveResult.Success) {
                     // Replace original file with the reordered version
                     val originalFile = java.io.File(pdfFile.path)
                     val tempFile = java.io.File(tempOutputPath)
-                    
+
                     if (tempFile.exists()) {
                         // Backup original file
                         val backupPath = "${pdfFile.path}.backup"
                         val backupFile = java.io.File(backupPath)
                         if (backupFile.exists()) backupFile.delete()
                         originalFile.renameTo(backupFile)
-                        
+
                         // Move temp file to original location
                         if (tempFile.renameTo(originalFile)) {
                             // Delete backup on successful replacement
@@ -582,7 +851,7 @@ class TabScreenModel(
                 } else {
                     saveResult = result
                 }
-                
+
             } catch (e: Exception) {
                 saveResult = SaveResult.Error("Save failed: ${e.message}")
                 e.printStackTrace()
@@ -593,14 +862,14 @@ class TabScreenModel(
             }
         }
     }
-    
+
     /**
      * Clear the last save result
      */
     fun clearSaveResult() {
         saveResult = null
     }
-    
+
     /**
      * Validate an output path for saving
      */
@@ -636,21 +905,6 @@ class TabScreenModel(
             )
         }
     }
-    
-    @Deprecated("Use renderPageHighQuality instead")
-    private suspend fun renderPage(filePath: String, pageIndex: Int, dpi: Float = 150f): ImageBitmap? =
-        withContext(Dispatchers.IO) {
-            try {
-                PDDocument.load(File(filePath)).use { document ->
-                    val renderer = PDFRenderer(document)
-                    val bufferedImage: BufferedImage = renderer.renderImageWithDPI(pageIndex, dpi, ImageType.RGB)
-                    bufferedImage.toImageBitmap()
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
-            }
-        }
 
     private suspend fun renderThumbnails(filePath: String, maxPages: Int): List<ImageBitmap> =
         withContext(Dispatchers.IO) {
@@ -690,9 +944,7 @@ class TabScreenModel(
         return skiaImage.toComposeImageBitmap()
     }
 
-
-
-   private fun extractAllTextData(filePath: String): Map<Int, List<TextPositionData>> {
+    private fun extractAllTextData(filePath: String): Map<Int, List<TextPositionData>> {
         PDDocument.load(File(filePath)).use { document ->
             val stripper = PositionAwareTextStripper()
 
@@ -700,9 +952,9 @@ class TabScreenModel(
 
             return stripper.allPageTextData.mapValues { it.value.toList() }
         }
-   }
+    }
 
-   //function to get to convert allTextData to a map of page number to textOnly
+    //function to get to convert allTextData to a map of page number to textOnly
     private fun getTextOnlyData(): Map<Int, String> {
         return allTextDataWithCoordinates.mapValues { entry ->
             entry.value.joinToString(" ") { it.text }
@@ -735,7 +987,7 @@ class TabScreenModel(
         }
     }
 
-     //Helper function to recursively process the PDOutline tree.
+    //Helper function to recursively process the PDOutline tree.
 
     private fun processOutlineItem(item: PDOutlineItem, document: PDDocument): TableOfContentData? {
         val title = item.title
@@ -775,5 +1027,4 @@ class TabScreenModel(
             children = children
         )
     }
-
 }

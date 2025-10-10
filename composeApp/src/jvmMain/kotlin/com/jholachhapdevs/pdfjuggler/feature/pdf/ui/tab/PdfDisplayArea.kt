@@ -2,13 +2,25 @@ package com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.SaveAs
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -17,7 +29,6 @@ import androidx.compose.ui.input.key.*
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JButton
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveDialog
-import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveResultDialog
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfLeft
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfMid
 
@@ -28,7 +39,7 @@ fun PdfDisplayArea(
     val listState = rememberLazyListState()
     var showSaveAsDialog by remember { mutableStateOf(false) }
 
-    // When this tab becomes active (composed), ensure the selected page is scrolled to top.
+    // Keep left pane scrolled to the selected page
     LaunchedEffect(model.pdfFile.path) {
         if (model.thumbnails.isNotEmpty()) {
             val idx = model.selectedPageIndex.coerceIn(0, model.thumbnails.lastIndex)
@@ -319,6 +330,43 @@ fun PdfSearchBar(model: TabScreenModel) {
                     }
                 }
             }
+            Row(Modifier.fillMaxSize()) {
+                PdfLeft(
+                    modifier = Modifier.weight(0.15f).fillMaxSize(),
+                    thumbnails = model.thumbnails,
+                    tableOfContents = model.tableOfContent,
+                    bookmarks = model.bookmarks,
+                    selectedIndex = model.selectedPageIndex,
+                    onThumbnailClick = { model.selectPage(it) },
+                    onMovePageUp = { model.movePageUp(it) },
+                    onMovePageDown = { model.movePageDown(it) },
+                    onAddBookmark = { bookmark -> model.addBookmark(bookmark) },
+                    onRemoveBookmark = { index -> model.removeBookmark(index) },
+                    onRemoveBookmarkForPage = { pageIndex -> model.removeBookmarkForPage(pageIndex) },
+                    onSaveBookmarksToMetadata = { model.saveBookmarksToMetadata() },
+                    hasPageChanges = model.hasPageChanges,
+                    hasUnsavedBookmarks = model.hasUnsavedBookmarks,
+                    listState = listState
+                )
+
+                PdfMid(
+                    modifier = Modifier.weight(0.85f).fillMaxSize(),
+                    pageImage = model.currentPageImage,
+                    textData = model.allTextDataWithCoordinates[model.selectedPageIndex] ?: emptyList()
+                )
+            }
         }
     }
+
+    SaveDialog(
+        isOpen = showSaveAsDialog,
+        currentFileName = model.pdfFile.path,
+        isOverwrite = false,
+        onDismiss = { showSaveAsDialog = false },
+        onSave = { path ->
+            showSaveAsDialog = false
+            model.savePdfAs(path)
+        },
+        onValidatePath = { path -> model.validateSavePath(path) }
+    )
 }
