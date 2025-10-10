@@ -340,7 +340,7 @@ fun PdfDisplayArea(
                             }
                         },
                         onDictionaryRequest = { text -> model.requestAiDictionary(text) },
-                        onTranslateRequest = { text -> model.requestAiTranslate(text) }
+                        onTranslateRequest = { text -> model.requestAiTranslate(text) },
                         showToolbar = false,
                         externalZoom = model.currentZoom,
                         onZoomIn = { model.zoomIn() },

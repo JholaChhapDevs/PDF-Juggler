@@ -64,8 +64,8 @@ fun PdfMid(
     onAddHighlight: (rectsNormalized: List<Rect>, colorArgb: Long) -> Unit = { _, _ -> },
     // New: AI actions
     onDictionaryRequest: (text: String) -> Unit = {},
-    onTranslateRequest: (text: String) -> Unit = {}
-    pageIndex: Int = 0,
+    onTranslateRequest: (text: String) -> Unit = {},
+
     showToolbar: Boolean = true,
     externalZoom: Float = 1f,
     onZoomIn: () -> Unit = {},
