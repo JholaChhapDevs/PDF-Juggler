@@ -53,7 +53,11 @@ fun PdfMid(
     // New: size of the PDF page in points (mediaBox width/height)
     pageSizePoints: Size? = null,
     // New: notify zoom changes to parent
-    onZoomChanged: (Float) -> Unit = {}
+    onZoomChanged: (Float) -> Unit = {},
+    // New: positions to highlight for search match on current page
+    searchHighlightPositions: List<TextPositionData> = emptyList(),
+    // New: trigger for auto-scrolling to search matches
+    scrollToMatchTrigger: Int = 0
 ) {
     val cs = MaterialTheme.colorScheme
     val clipboardManager = LocalClipboardManager.current
@@ -253,6 +257,49 @@ fun PdfMid(
     fun zoomInStep() { setZoomAroundAnchor(zoomFactor * 1.25f, Offset(viewportSize.width/2f, viewportSize.height/2f)) }
     fun zoomOutStep() { setZoomAroundAnchor(zoomFactor / 1.25f, Offset(viewportSize.width/2f, viewportSize.height/2f)) }
 
+    // Auto-scroll to search match when trigger changes
+    LaunchedEffect(scrollToMatchTrigger, searchHighlightPositions, viewportSize, contentBaseSize) {
+        if (scrollToMatchTrigger > 0 && searchHighlightPositions.isNotEmpty() && 
+            viewportSize.width > 0 && viewportSize.height > 0 && 
+            contentBaseSize.width > 0 && contentBaseSize.height > 0) {
+            
+            // Calculate the bounding box of all highlighted positions
+            val posSet = searchHighlightPositions.toSet()
+            val matchRects = textBoundsNormalized.filter { (_, tp) ->
+                posSet.contains(tp)
+            }.map { it.first }
+            
+            if (matchRects.isNotEmpty()) {
+                // Find the center of the bounding box of all highlighted text
+                val minLeft = matchRects.minOf { it.left }
+                val maxRight = matchRects.maxOf { it.right }
+                val minTop = matchRects.minOf { it.top }
+                val maxBottom = matchRects.maxOf { it.bottom }
+                
+                val centerX = (minLeft + maxRight) / 2f
+                val centerY = (minTop + maxBottom) / 2f
+                
+                // Convert normalized coordinates to content coordinates (scaled by zoom)
+                val contentCenterX = centerX * contentBaseSize.width * zoomFactor
+                val contentCenterY = centerY * contentBaseSize.height * zoomFactor
+                
+                // Calculate the offset needed to center the match in the viewport
+                val targetOffsetX = (viewportSize.width / 2f) - contentCenterX
+                val targetOffsetY = (viewportSize.height / 2f) - contentCenterY
+                
+                // Apply clamping to keep content within bounds
+                val newOffset = clampPan(
+                    viewportSize,
+                    contentBaseSize,
+                    zoomFactor,
+                    Offset(targetOffsetX, targetOffsetY)
+                )
+                
+                panOffset = newOffset
+            }
+        }
+    }
+
     Surface(color = cs.background, tonalElevation = 0.dp, modifier = modifier) {
         Box(
             modifier = Modifier
@@ -365,7 +412,27 @@ fun PdfMid(
                                 val canvasWidth = size.width
                                 val canvasHeight = size.height
 
-                                // Draw selected text highlight rectangles in yellow
+                                // First: draw search match highlight rectangles in cyan
+                                if (searchHighlightPositions.isNotEmpty()) {
+                                    val posSet = searchHighlightPositions.toSet()
+                                    val matchRects = textBoundsNormalized.filter { (_, tp) ->
+                                        posSet.contains(tp)
+                                    }.map { it.first }
+                                    val mergedMatch = mergeRectsOnLines(matchRects)
+                                    mergedMatch.forEach { nb ->
+                                        val left = nb.left * canvasWidth
+                                        val top = nb.top * canvasHeight
+                                        val rectWidth = nb.width * canvasWidth
+                                        val rectHeight = nb.height * canvasHeight
+                                        drawRect(
+                                            color = androidx.compose.ui.graphics.Color(0xFF00BCD4).copy(alpha = 0.35f),
+                                            topLeft = Offset(left, top),
+                                            size = Size(rectWidth, rectHeight)
+                                        )
+                                    }
+                                }
+
+                                // Then: draw selected text highlight rectangles in yellow
                                 val toDraw = mergeRectsOnLines(selectedRectsNormalized)
                                 toDraw.forEach { nb ->
                                     val left = nb.left * canvasWidth

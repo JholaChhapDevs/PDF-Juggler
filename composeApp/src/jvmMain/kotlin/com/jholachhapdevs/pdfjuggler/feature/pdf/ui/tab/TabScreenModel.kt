@@ -43,6 +43,18 @@ class TabScreenModel(
     // PDF page reordering utility
     private val pdfReorderUtil = PdfPageReorderUtil()
 
+    // --- Search state ---
+    data class SearchMatch(
+        val pageIndex: Int, // original page index
+        val positions: List<TextPositionData>
+    )
+    var searchQuery by mutableStateOf("")
+        private set
+    var searchMatches by mutableStateOf<List<SearchMatch>>(emptyList())
+        private set
+    var currentSearchIndex by mutableStateOf(-1)
+        private set
+
     var thumbnails by mutableStateOf<List<ImageBitmap>>(emptyList())
         private set
 
@@ -70,7 +82,10 @@ class TabScreenModel(
     private var currentZoom by mutableStateOf(1f)
     private var currentViewport by mutableStateOf(IntSize.Zero)
     
-    // Current rotation angle (0, 90, 180, 270 degrees)
+    // Auto-scroll trigger for search matches
+    private var _scrollToMatchTrigger by mutableStateOf(0)
+    val scrollToMatchTrigger: Int get() = _scrollToMatchTrigger
+    
     var currentRotation by mutableStateOf(0f)
         private set
     
@@ -116,6 +131,13 @@ class TabScreenModel(
                 // Extract page sizes in points for proper coordinate mapping
                 pageSizesPoints = extractPageSizesPoints(pdfFile.path)
 
+                // Clear previous search (if any) and recompute based on current query
+                if (searchQuery.isNotBlank()) {
+                    recomputeSearchMatches()
+                } else {
+                    clearSearch()
+                }
+
                 // Automatically print text data with coordinates for all pages after loading
                 printAllPagesTextWithCoordinates()
             } catch (e: Exception) {
@@ -138,6 +160,102 @@ class TabScreenModel(
                 e.printStackTrace()
             }
         }
+    }
+
+    // --- Search API ---
+    fun updateSearchQuery(query: String) {
+        searchQuery = query
+        if (query.isBlank()) {
+            clearSearch()
+        } else {
+            recomputeSearchMatches()
+        }
+    }
+
+    fun clearSearch() {
+        searchMatches = emptyList()
+        currentSearchIndex = -1
+    }
+
+    private fun recomputeSearchMatches() {
+        val q = searchQuery.trim().lowercase()
+        if (q.isEmpty()) {
+            clearSearch(); return
+        }
+        val matches = mutableListOf<SearchMatch>()
+        for (originalPage in 0 until totalPages) {
+            val items = allTextDataWithCoordinates[originalPage] ?: continue
+            var i = 0
+            while (i < items.size) {
+                var k = 0
+                var j = i
+                val collected = mutableListOf<TextPositionData>()
+                while (j < items.size && k < q.length) {
+                    val t = items[j].text.lowercase()
+                    val remaining = q.substring(k)
+                    if (remaining.startsWith(t)) {
+                        collected.add(items[j])
+                        k += t.length
+                        j++
+                    } else {
+                        break
+                    }
+                }
+                if (k == q.length && collected.isNotEmpty()) {
+                    matches.add(SearchMatch(originalPage, collected.toList()))
+                    i = j
+                } else {
+                    i++
+                }
+            }
+        }
+        searchMatches = matches
+        currentSearchIndex = if (matches.isNotEmpty()) 0 else -1
+        // If first match exists and is on another page, navigate there
+        val first = matches.firstOrNull()
+        if (first != null) {
+            val displayIdx = pageOrder.indexOf(first.pageIndex)
+            if (displayIdx >= 0) selectPage(displayIdx)
+        }
+    }
+
+    fun goToNextMatch() {
+        if (searchMatches.isEmpty()) return
+        currentSearchIndex = (currentSearchIndex + 1) % searchMatches.size
+        val match = searchMatches[currentSearchIndex]
+        val displayIdx = pageOrder.indexOf(match.pageIndex)
+        if (displayIdx >= 0) {
+            selectPage(displayIdx)
+            scrollToCurrentMatch()
+        }
+    }
+    
+    fun goToPreviousMatch() {
+        if (searchMatches.isEmpty()) return
+        currentSearchIndex = if (currentSearchIndex <= 0) {
+            searchMatches.size - 1
+        } else {
+            currentSearchIndex - 1
+        }
+        val match = searchMatches[currentSearchIndex]
+        val displayIdx = pageOrder.indexOf(match.pageIndex)
+        if (displayIdx >= 0) {
+            selectPage(displayIdx)
+            scrollToCurrentMatch()
+        }
+    }
+    
+    private fun scrollToCurrentMatch() {
+        // Trigger scroll to the current search match by incrementing the trigger
+        _scrollToMatchTrigger++
+    }
+
+    fun currentMatchForDisplayedPage(): List<TextPositionData> {
+        val idx = currentSearchIndex
+        if (idx < 0 || idx >= searchMatches.size) return emptyList()
+        val match = searchMatches[idx]
+        val displayedOriginal = getOriginalPageIndex(selectedPageIndex)
+        return if (match.pageIndex == displayedOriginal) match.positions else emptyList()
     }
     
     /**
