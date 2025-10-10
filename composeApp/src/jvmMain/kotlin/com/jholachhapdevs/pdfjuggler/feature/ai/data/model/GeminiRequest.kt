@@ -17,6 +17,8 @@ data class GeminiContent(
 @Serializable
 data class GeminiPart(
     val text: String? = null,
+    @SerialName("inline_data")
+    val inlineData: GeminiInlineData? = null,
     @SerialName("file_data")
     val fileData: GeminiFileData? = null
 )

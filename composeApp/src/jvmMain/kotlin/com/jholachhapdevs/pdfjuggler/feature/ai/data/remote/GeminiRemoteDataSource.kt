@@ -27,9 +27,6 @@ class GeminiRemoteDataSource(
     private val baseUrl = "https://generativelanguage.googleapis.com/v1beta"
     private val uploadBaseUrl = "https://generativelanguage.googleapis.com/upload/v1beta"
 
-    /**
-     * Sends the full conversation to Gemini to preserve context.
-     */
     suspend fun sendChat(
         model: String,
         messages: List<ChatMessage>
@@ -42,7 +39,7 @@ class GeminiRemoteDataSource(
                 msg.files.forEach { f ->
                     add(
                         GeminiPart(
-                            fileData = GeminiFileData(
+                            fileData = com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiFileData(
                                 fileUri = f.fileUri,
                                 mimeType = f.mimeType
                             )
