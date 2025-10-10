@@ -23,17 +23,18 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun AiChatComponent(
+    screenModel: AiScreenModel,
     modifier: Modifier = Modifier
 ) {
-    val screenModel = remember { AiScreenModel() }
+    val ui = screenModel.uiState
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
     // Auto-scroll to bottom when new messages are added
-    LaunchedEffect(screenModel.messages.size) {
-        if (screenModel.messages.isNotEmpty()) {
+    LaunchedEffect(ui.messages.size) {
+        if (ui.messages.isNotEmpty()) {
             coroutineScope.launch {
-                listState.animateScrollToItem(screenModel.messages.size - 1)
+                listState.animateScrollToItem(ui.messages.size - 1)
             }
         }
     }
@@ -63,7 +64,7 @@ fun AiChatComponent(
                 )
                 
                 IconButton(
-                    onClick = { screenModel.clearChat() }
+                    onClick = { screenModel.clearMessages() }
                 ) {
                     Icon(
                         imageVector = Icons.Default.Clear,
@@ -84,10 +85,40 @@ fun AiChatComponent(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(
-                    items = screenModel.messages,
-                    key = { it.id }
+                    items = ui.messages
                 ) { message ->
                     ChatMessageItem(message = message)
+                }
+                
+                // Show loading indicator when sending
+                if (ui.isSending) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Start
+                        ) {
+                            Card(
+                                modifier = Modifier.widthIn(max = 280.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    JText(
+                                        text = "Thinking...",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -103,19 +134,19 @@ fun AiChatComponent(
                     verticalAlignment = Alignment.Bottom
                 ) {
                     OutlinedTextField(
-                        value = screenModel.currentInput,
+                        value = ui.input,
                         onValueChange = screenModel::updateInput,
                         modifier = Modifier.weight(1f),
                         placeholder = { JText("Ask me anything about your PDF...") },
-                        enabled = !screenModel.isLoading,
+                        enabled = !ui.isSending,
                         maxLines = 3
                     )
                     
                     Spacer(modifier = Modifier.width(8.dp))
                     
                     IconButton(
-                        onClick = screenModel::sendMessage,
-                        enabled = screenModel.currentInput.isNotBlank() && !screenModel.isLoading
+                        onClick = screenModel::send,
+                        enabled = ui.input.isNotBlank() && !ui.isSending
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
@@ -133,13 +164,14 @@ private fun ChatMessageItem(
     message: ChatMessage,
     modifier: Modifier = Modifier
 ) {
-    val alignment = if (message.isFromUser) Alignment.CenterEnd else Alignment.CenterStart
-    val backgroundColor = if (message.isFromUser) {
+    val isUser = message.role == "user"
+    val alignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
+    val backgroundColor = if (isUser) {
         MaterialTheme.colorScheme.primary
     } else {
         MaterialTheme.colorScheme.surfaceVariant
     }
-    val textColor = if (message.isFromUser) {
+    val textColor = if (isUser) {
         MaterialTheme.colorScheme.onPrimary
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
@@ -157,29 +189,11 @@ private fun ChatMessageItem(
             Box(
                 modifier = Modifier.padding(12.dp)
             ) {
-                if (message.isLoading) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = textColor
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        JText(
-                            text = "Thinking...",
-                            color = textColor,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                } else {
-                    JText(
-                        text = message.text,
-                        color = textColor,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
+                JText(
+                    text = message.text,
+                    color = textColor,
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
     }

@@ -9,6 +9,7 @@ data class GeminiRequest(
 
 @Serializable
 data class GeminiContent(
+    val role: String? = null,
     val parts: List<GeminiPart>
 )
 

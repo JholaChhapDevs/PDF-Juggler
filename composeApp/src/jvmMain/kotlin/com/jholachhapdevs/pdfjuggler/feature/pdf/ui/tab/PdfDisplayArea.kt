@@ -39,8 +39,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.key.*
+import cafe.adriel.voyager.core.model.rememberScreenModel
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JButton
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
+import com.jholachhapdevs.pdfjuggler.feature.ai.data.remote.GeminiRemoteDataSource
+import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.SendPromptUseCase
+import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiChatComponent
+import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiScreenModel
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveDialog
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfLeft
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfMid
@@ -168,7 +174,8 @@ fun PdfSearchBar(model: TabScreenModel) {
 
 @Composable
 fun PdfDisplayArea(
-    model: TabScreenModel
+    model: TabScreenModel,
+    aiScreenModel: AiScreenModel? = null
 ) {
     val listState = rememberLazyListState()
     var showSaveAsDialog by remember { mutableStateOf(false) }
@@ -303,13 +310,20 @@ fun PdfDisplayArea(
                             listState = listState
                         )
                     }
+                    
                     val originalPageIndex = model.getOriginalPageIndex(model.selectedPageIndex)
                     val pageSizePts = model.getPageSizePointsForDisplayIndex(model.selectedPageIndex)
-                    
                     val textDataForPage = model.allTextDataWithCoordinates[originalPageIndex] ?: emptyList()
-                   PdfMid(
+                    
+                    PdfMid(
                         modifier = Modifier
-                            .weight(if (model.isFullscreen) 1f else 0.85f)
+                            .weight(if (model.isFullscreen) {
+                                1f
+                            } else if (aiScreenModel != null) {
+                                0.55f // Less space when AI chat is enabled
+                            } else {
+                                0.85f
+                            })
                             .fillMaxSize()
                             .padding(top = 24.dp), // add gap only above the PDF area
                         pageImage = model.currentPageImage,
@@ -337,6 +351,20 @@ fun PdfDisplayArea(
                         scrollToMatchTrigger = model.scrollToMatchTrigger,
                         pageIndex = originalPageIndex
                     )
+                    
+                    // AI Chat panel (only show when enabled and not in fullscreen)
+                    aiScreenModel?.let { screenModel ->
+                        if (!model.isFullscreen) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(0.3f)
+                                    .fillMaxSize()
+                                    .padding(start = 8.dp)
+                            ) {
+                                AiChatComponent(screenModel = screenModel)
+                            }
+                        }
+                    }
                 }
             }
             

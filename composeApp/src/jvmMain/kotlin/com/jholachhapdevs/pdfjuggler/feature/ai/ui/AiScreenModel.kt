@@ -4,98 +4,146 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import cafe.adriel.voyager.core.model.ScreenModel
-import cafe.adriel.voyager.core.model.screenModelScope
-import com.jholachhapdevs.pdfjuggler.core.util.Env
-import com.jholachhapdevs.pdfjuggler.feature.ai.data.remote.GeminiRemoteDataSource
 import com.jholachhapdevs.pdfjuggler.feature.ai.domain.model.ChatMessage
+import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.SendPromptUseCase
+import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.PdfFile
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
-import java.util.UUID
+import kotlinx.coroutines.withContext
+import org.apache.pdfbox.pdmodel.PDDocument
+import org.apache.pdfbox.text.PDFTextStripper
+import java.io.File
 
-class AiScreenModel : ScreenModel {
+class AiScreenModel(
+    val pdfFile: PdfFile,
+    private val sendPromptUseCase: SendPromptUseCase
+) : ScreenModel {
 
-    // For demo purposes, using a hardcoded API key
-    // In production, this should be stored securely
-    private val apiKey = Env.GEMINI_API_KEY
-    private val remoteDataSource = GeminiRemoteDataSource(apiKey)
-    private val model = "gemini-2.5-flash"
-
-    var messages by mutableStateOf<List<ChatMessage>>(
-        listOf(
-            ChatMessage(
-                id = UUID.randomUUID().toString(),
-                text = "Hello! I'm your AI assistant. I can help you with questions about your PDF documents. How can I assist you today?",
-                isFromUser = false
-            )
-        )
-    )
-        private set
-
-    var currentInput by mutableStateOf("")
-        private set
-
-    var isLoading by mutableStateOf(false)
-        private set
-
-    fun updateInput(input: String) {
-        currentInput = input
+    companion object {
+        private const val CONTEXT_CHAR_LIMIT = 12000 // keep request compact
     }
 
-    fun sendMessage() {
-        if (currentInput.isBlank()) return
+    var uiState by mutableStateOf(ChatUiState())
+        private set
 
-        val userMessage = ChatMessage(
-            id = UUID.randomUUID().toString(),
-            text = currentInput,
-            isFromUser = true
-        )
+    private val scope = CoroutineScope(Dispatchers.Main)
+    private var currentJob: Job? = null
 
-        // Add user message
-        messages = messages + userMessage
-        val prompt = currentInput
-        currentInput = ""
+    // Cached extracted text and a flag to inject only once
+    private var pdfText: String? = null
+    private var contextInjected = false
 
-        // Add loading message
-        val loadingMessage = ChatMessage(
-            id = UUID.randomUUID().toString(),
-            text = "",
-            isFromUser = false,
-            isLoading = true
-        )
-        messages = messages + loadingMessage
-        isLoading = true
+    init {
+        // Preload PDF text off the main thread (best-effort)
+        scope.launch(Dispatchers.IO) {
+            pdfText = safelyExtractPdfText(pdfFile.path)?.let { compressAndLimit(it) }
+        }
+    }
 
-        screenModelScope.launch {
+    fun updateInput(text: String) {
+        uiState = uiState.copy(input = text)
+    }
+
+    fun send() {
+        val prompt = uiState.input.trim()
+        if (prompt.isBlank() || uiState.isSending) return
+
+        // Update UI immediately with the user's message
+        val uiWithUser = uiState.messages + ChatMessage(role = "user", text = prompt)
+        uiState = uiState.copy(messages = uiWithUser, input = "", isSending = true, error = null)
+
+        currentJob = scope.launch {
             try {
-                val response = remoteDataSource.sendPrompt(model, prompt)
-                val aiText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-                    ?: "Sorry, I couldn't generate a response at the moment."
+                // Build the payload to the model: optionally prepend hidden PDF context once
+                val toModel = mutableListOf<ChatMessage>()
 
-                // Remove loading message and add AI response
-                messages = messages.filter { !it.isLoading } + ChatMessage(
-                    id = UUID.randomUUID().toString(),
-                    text = aiText,
-                    isFromUser = false
-                )
-            } catch (e: Exception) {
-                // Remove loading message and add error message
-                messages = messages.filter { !it.isLoading } + ChatMessage(
-                    id = UUID.randomUUID().toString(),
-                    text = "Sorry, I encountered an error: ${e.message}. Please make sure you have a valid API key configured.",
-                    isFromUser = false
-                )
+                if (!contextInjected) {
+                    val ctx = ensureContextMessage()
+                    if (ctx != null) {
+                        toModel += ctx
+                        contextInjected = true
+                    }
+                }
+
+                toModel += uiWithUser
+
+                val response = sendPromptUseCase(toModel)
+                uiState = uiState.copy(messages = uiState.messages + response)
+            } catch (t: Throwable) {
+                uiState = uiState.copy(error = t.message ?: "Something went wrong")
             } finally {
-                isLoading = false
+                uiState = uiState.copy(isSending = false)
+                currentJob = null
             }
         }
     }
 
-    fun clearChat() {
-        messages = listOf(
-            ChatMessage(
-                id = UUID.randomUUID().toString(),
-                text = "Hello! I'm your AI assistant. I can help you with questions about your PDF documents. How can I assist you today?",
-                isFromUser = false
-            )
-        )
+    fun cancelSending() {
+        val job = currentJob ?: return
+        scope.launch {
+            try {
+                job.cancelAndJoin()
+            } finally {
+                uiState = uiState.copy(isSending = false)
+                currentJob = null
+            }
+        }
+    }
+
+    fun clearMessages() {
+        if (uiState.isSending) return
+        uiState = uiState.copy(messages = emptyList())
+        // Do not reset contextInjected so new sends still include context when needed
+    }
+
+    fun newChat() {
+        if (uiState.isSending) return
+        uiState = ChatUiState()
+        contextInjected = false
+    }
+
+    fun dismissError() {
+        uiState = uiState.copy(error = null)
+    }
+
+    private suspend fun ensureContextMessage(): ChatMessage? {
+        val text = pdfText ?: withContext(Dispatchers.IO) {
+            safelyExtractPdfText(pdfFile.path)?.let { compressAndLimit(it) }
+                .also { pdfText = it }
+        }
+
+        if (text.isNullOrBlank()) return null
+
+        val msgText = "PDF context — `${pdfFile.name}`: $text"
+        return ChatMessage(role = "user", text = msgText)
+    }
+
+    private fun safelyExtractPdfText(path: String): String? = try {
+        PDDocument.load(File(path)).use { doc ->
+            PDFTextStripper().apply {
+                sortByPosition = true
+                startPage = 1
+                endPage = Integer.MAX_VALUE
+            }.getText(doc)
+        }
+    } catch (_: Throwable) {
+        null
+    }
+
+    private fun compressAndLimit(text: String): String {
+        // Keep paragraphs but normalize whitespace; then truncate
+        val normalized = text
+            .replace("\r", "")
+            .replace(Regex("[\\t\\u00A0]"), " ")
+            .replace(Regex(" +"), " ")
+            .replace(Regex("\\n{3,}"), "\n\n")
+            .trim()
+        return if (normalized.length > CONTEXT_CHAR_LIMIT)
+            normalized.substring(0, CONTEXT_CHAR_LIMIT)
+        else
+            normalized
     }
 }

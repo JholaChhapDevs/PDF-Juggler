@@ -10,6 +10,7 @@ import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.TabScreenModel
 @Composable
 fun AiChatPdfComponent(
     tabScreenModel: TabScreenModel,
+    aiScreenModel: AiScreenModel,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -28,7 +29,7 @@ fun AiChatPdfComponent(
                 .weight(0.3f)
                 .padding(start = 8.dp)
         ) {
-            AiChatComponent()
+            AiChatComponent(screenModel = aiScreenModel)
         }
     }
 }
