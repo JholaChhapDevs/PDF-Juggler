@@ -16,6 +16,9 @@ import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TextPositionData
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.BookmarkData
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.HighlightMark
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.PositionAwareTextStripper
+import com.jholachhapdevs.pdfjuggler.feature.ai.data.remote.GeminiRemoteDataSource
+import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.UploadFileUseCase
+import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.GenerateTableOfContentsUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -26,6 +29,7 @@ import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPa
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem
 import java.io.File
+import kotlin.math.min
 
 /**
  * Refactored TabScreenModel that coordinates between various managers
@@ -45,6 +49,14 @@ class TabScreenModel(
     
     // Search manager - initialized after core state is set up
     private lateinit var searchManager: SearchManager
+    
+    // AI services for TOC generation
+    private val geminiRemoteDataSource = GeminiRemoteDataSource()
+    private val uploadFileUseCase = UploadFileUseCase(geminiRemoteDataSource)
+    private val generateTableOfContentsUseCase = GenerateTableOfContentsUseCase(
+        remote = geminiRemoteDataSource,
+        uploadFileUseCase = uploadFileUseCase
+    )
     
     // Core state
     var totalPages by mutableStateOf(0)
@@ -414,6 +426,24 @@ class TabScreenModel(
     fun clearPendingAiRequest() { 
         pendingAiRequest = null 
     }
+    
+    /**
+     * Manually regenerate table of contents using Gemini API
+     * This can be called by the UI to force regeneration
+     */
+    fun regenerateTableOfContentsWithAI() {
+        screenModelScope.launch {
+            try {
+                println("Manually regenerating table of contents with Gemini API...")
+                val newToc = generateTableOfContentsWithGemini(pdfFile.path, totalPages)
+                tableOfContent = newToc
+                println("Table of contents regenerated successfully with ${newToc.size} items")
+            } catch (e: Exception) {
+                println("Error regenerating table of contents: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+    }
 
     // ============ Utility Methods ============
     private suspend fun getTotalPages(filePath: String): Int = withContext(Dispatchers.IO) {
@@ -453,11 +483,97 @@ class TabScreenModel(
         PDDocument.load(File(filePath)).use { document ->
             val outline: PDDocumentOutline? = document.documentCatalog.documentOutline
 
-            if (outline == null) return@withContext emptyList()
-
-            // Process the children of the root outline
-            return@withContext outline.children().mapNotNull {
-                if (it is PDOutlineItem) processOutlineItem(it, document) else null
+            // Check if PDF has metadata table of contents
+            if (outline != null) {
+                val metadataToc = outline.children().mapNotNull {
+                    if (it is PDOutlineItem) processOutlineItem(it, document) else null
+                }
+                
+                // If we found a valid TOC in metadata, use it
+                if (metadataToc.isNotEmpty()) {
+                    println("Using table of contents from PDF metadata")
+                    return@withContext metadataToc
+                }
+            }
+            
+            // If no metadata TOC found, generate one using Gemini API
+            println("No table of contents found in PDF metadata, generating using Gemini API...")
+            return@withContext generateTableOfContentsWithGemini(filePath, document.numberOfPages)
+        }
+    }
+    
+    /**
+     * Generate table of contents using Gemini API
+     */
+    private suspend fun generateTableOfContentsWithGemini(
+        filePath: String, 
+        totalPages: Int
+    ): List<TableOfContentData> {
+        return try {
+            // Read the PDF file as bytes
+            val pdfBytes = File(filePath).readBytes()
+            val fileName = File(filePath).name
+            
+            // Generate TOC using Gemini
+            val generatedToc = generateTableOfContentsUseCase(
+                pdfBytes = pdfBytes,
+                fileName = fileName,
+                totalPages = totalPages
+            )
+            
+            if (generatedToc.isNotEmpty()) {
+                println("Successfully generated table of contents using Gemini API (${generatedToc.size} items)")
+                generatedToc
+            } else {
+                println("Gemini API returned empty table of contents, using fallback")
+                createFallbackTableOfContents(totalPages)
+            }
+            
+        } catch (e: Exception) {
+            println("Error generating table of contents with Gemini API: ${e.message}")
+            e.printStackTrace()
+            // Return a simple fallback TOC
+            createFallbackTableOfContents(totalPages)
+        }
+    }
+    
+    /**
+     * Create a simple fallback table of contents when all else fails
+     */
+    private fun createFallbackTableOfContents(totalPages: Int): List<TableOfContentData> {
+        return if (totalPages <= 5) {
+            // For short documents, create a simple entry
+            listOf(
+                TableOfContentData(
+                    title = "Document Content",
+                    pageIndex = 0,
+                    destinationY = 0f,
+                    children = emptyList()
+                )
+            )
+        } else {
+            // For longer documents, create chapter-like sections
+            val sectionsCount = min(5, (totalPages + 4) / 5) // Roughly divide into sections
+            val pagesPerSection = totalPages / sectionsCount
+            
+            (0 until sectionsCount).map { sectionIndex ->
+                val startPage = sectionIndex * pagesPerSection
+                val endPage = if (sectionIndex == sectionsCount - 1) {
+                    totalPages - 1
+                } else {
+                    (sectionIndex + 1) * pagesPerSection - 1
+                }
+                
+                TableOfContentData(
+                    title = if (sectionsCount == 1) {
+                        "Document Content"
+                    } else {
+                        "Section ${sectionIndex + 1} (Pages ${startPage + 1}-${endPage + 1})"
+                    },
+                    pageIndex = startPage,
+                    destinationY = 0f,
+                    children = emptyList()
+                )
             }
         }
     }
