@@ -642,17 +642,6 @@ fun PdfMid(
                                 )
                                 // AI options
                                 DropdownMenuItem(
-                                    text = { Text("Dictionary & Translate (AI)") },
-                                    onClick = {
-                                        val textSel = selectedText.trim()
-                                        if (textSel.isNotEmpty()) {
-                                            clipboardManager.setText(AnnotatedString(textSel))
-                                            onDictionaryRequest(textSel)
-                                        }
-                                        ctxMenuOpen = false
-                                    }
-                                )
-                                DropdownMenuItem(
                                     text = { Text("Dictionary (AI)") },
                                     onClick = {
                                         val textSel = selectedText.trim()

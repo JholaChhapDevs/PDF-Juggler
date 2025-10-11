@@ -73,7 +73,9 @@ fun PdfTabComponent(
         val pendingAi = currentTabModel?.pendingAiRequest
         LaunchedEffect(pendingAi) {
             if (pendingAi != null) {
+                println("DEBUG: Pending AI request detected: ${pendingAi.mode} for text: '${pendingAi.text.take(50)}...'")
                 model.setAiChatVisible(true)
+                println("DEBUG: AI chat enabled: ${model.isAiChatEnabled}")
             }
         }
 

@@ -37,7 +37,8 @@ import kotlin.math.min
  */
 class TabScreenModel(
     val pdfFile: PdfFile,
-    private val window: java.awt.Window? = null
+    private val window: java.awt.Window? = null,
+    private val onAiChatRequest: (() -> Unit)? = null
 ) : ScreenModel {
     
     // Core managers
@@ -454,11 +455,23 @@ class TabScreenModel(
 
     // ============ AI Request Methods ============
     fun requestAiDictionary(text: String) {
-        if (text.isNotBlank()) pendingAiRequest = AiRequest(text, AiRequestMode.Dictionary)
+        if (text.isNotBlank()) {
+            println("DEBUG: Dictionary request for text: '${text.take(50)}...'")
+            pendingAiRequest = AiRequest(text, AiRequestMode.Dictionary)
+            // Trigger AI chat panel to open
+            println("DEBUG: Invoking AI chat request callback")
+            onAiChatRequest?.invoke()
+        }
     }
     
     fun requestAiTranslate(text: String) {
-        if (text.isNotBlank()) pendingAiRequest = AiRequest(text, AiRequestMode.Translate)
+        if (text.isNotBlank()) {
+            println("DEBUG: Translate request for text: '${text.take(50)}...'")
+            pendingAiRequest = AiRequest(text, AiRequestMode.Translate)
+            // Trigger AI chat panel to open
+            println("DEBUG: Invoking AI chat request callback")
+            onAiChatRequest?.invoke()
+        }
     }
     
     fun clearPendingAiRequest() { 

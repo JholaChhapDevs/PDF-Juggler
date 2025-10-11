@@ -114,6 +114,104 @@ class AiScreenModel(
         uiState = uiState.copy(error = null)
     }
 
+    /**
+     * Process a pending AI request from TabScreenModel
+     * This sends a constrained prompt based on the mode without showing the prompt in chat
+     */
+    fun processPendingRequest(
+        text: String,
+        mode: com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.AiRequestMode
+    ) {
+        if (uiState.isSending) return
+
+        val (prompt, shouldAttachPdf) = when (mode) {
+            com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.AiRequestMode.Dictionary -> {
+                Pair("What does '$text' mean?", false) // Dictionary doesn't need PDF context
+            }
+            com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.AiRequestMode.Translate -> {
+                Pair(
+                    "Please translate ONLY this specific text: '$text'\n\nWhat language would you like me to translate it to? Please specify the target language, and I'll provide the translation for just this selected text.",
+                    false // Translation doesn't need PDF context, just the selected text
+                )
+            }
+        }
+
+        // Start sending immediately without showing the prompt message in chat
+        uiState = uiState.copy(
+            isSending = true,
+            error = null
+        )
+
+        currentJob = screenModelScope.launch {
+            try {
+                val attached = if (shouldAttachPdf) ensurePdfFileAttachment() else null
+                val promptMessage = ChatMessage(
+                    role = "user", 
+                    text = prompt,
+                    files = if (attached != null) listOf(attached) else emptyList()
+                )
+                
+                val reply = sendPromptUseCase(listOf(promptMessage))
+                // Only show the AI response, not the prompt
+                uiState = uiState.copy(
+                    messages = uiState.messages + reply,
+                    isSending = false
+                )
+            } catch (t: Throwable) {
+                uiState = uiState.copy(isSending = false, error = t.message ?: "Failed to send")
+            }
+        }
+    }
+
+    /**
+     * Generate a comprehensive cheat sheet with key terms, definitions, and important concepts
+     */
+    fun generateCheatSheet() {
+        if (uiState.isSending) return
+
+        val prompt = """
+            Create a comprehensive cheat sheet for this PDF document that includes:
+            
+            ## 📚 KEY TERMS
+            - List the most important terms and vocabulary
+            
+            ## 📖 DEFINITIONS
+            - Provide clear, concise definitions for key concepts
+            
+            ## 💡 IMPORTANT CONCEPTS
+            - Highlight the main ideas and principles
+            - Include any formulas, theories, or frameworks
+            
+            Please format this as a well-structured study guide that would be helpful for review and reference.
+        """.trimIndent()
+
+        // Start generating cheat sheet
+        uiState = uiState.copy(
+            isSending = true,
+            error = null
+        )
+
+        currentJob = screenModelScope.launch {
+            try {
+                val attached = ensurePdfFileAttachment()
+                val promptMessage = ChatMessage(
+                    role = "user", 
+                    text = prompt,
+                    files = if (attached != null) listOf(attached) else emptyList()
+                )
+                
+                val reply = sendPromptUseCase(listOf(promptMessage))
+                // Only show the AI response (cheat sheet), not the prompt
+                uiState = uiState.copy(
+                    messages = uiState.messages + reply,
+                    isSending = false
+                )
+            } catch (t: Throwable) {
+                uiState = uiState.copy(isSending = false, error = t.message ?: "Failed to generate cheat sheet")
+            }
+        }
+    }
+
     private suspend fun ensurePdfFileAttachment(): AttachedFile? {
         val cached = pdfFileUri
         if (cached != null) {

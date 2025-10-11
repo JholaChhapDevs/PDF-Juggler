@@ -86,7 +86,13 @@ class PdfTabScreenModel(
     }
 
     private fun getOrCreateModel(file: PdfFile): TabScreenModel {
-        return contentCache.getOrPut(file.path) { TabScreenModel(file, window) }
+        return contentCache.getOrPut(file.path) { 
+            TabScreenModel(
+                pdfFile = file, 
+                window = window,
+                onAiChatRequest = { setAiChatVisible(true) }
+            ) 
+        }
     }
 
     // Split view functions

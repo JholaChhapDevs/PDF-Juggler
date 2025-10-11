@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -117,16 +118,16 @@ fun AiChatComponent(screenModel: AiScreenModel) {
                     )
                     Spacer(Modifier.weight(1f))
                     IconButton(
+                        onClick = { screenModel.generateCheatSheet() },
+                        enabled = !ui.isSending
+                    ) {
+                        Icon(Icons.Outlined.MenuBook, contentDescription = "Generate Cheat Sheet")
+                    }
+                    IconButton(
                         onClick = { screenModel.clearMessages() },
                         enabled = ui.messages.isNotEmpty() && !ui.isSending
                     ) {
                         Icon(Icons.Outlined.Delete, contentDescription = "Clear chat")
-                    }
-                    IconButton(
-                        onClick = { screenModel.newChat() },
-                        enabled = !ui.isSending
-                    ) {
-                        Icon(Icons.Outlined.Add, contentDescription = "New chat")
                     }
                 }
 
@@ -204,7 +205,7 @@ fun AiChatComponent(screenModel: AiScreenModel) {
                                         )
                                         Spacer(Modifier.width(10.dp))
                                         Text(
-                                            text = "Thinking...",
+                                            text = "Juggling...",
                                             style = MaterialTheme.typography.bodyMedium
                                         )
                                     }

@@ -160,6 +160,17 @@ fun PdfDisplayArea(
         aiScreenModel?.setSelectedPage(model.selectedPageIndex)
     }
 
+    // Handle pending AI requests from context menu
+    LaunchedEffect(model.pendingAiRequest) {
+        val pendingRequest = model.pendingAiRequest
+        if (pendingRequest != null && aiScreenModel != null) {
+            // Process the pending request
+            aiScreenModel.processPendingRequest(pendingRequest.text, pendingRequest.mode)
+            // Clear the pending request
+            model.clearPendingAiRequest()
+        }
+    }
+
     if (model.isLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -241,43 +252,55 @@ fun PdfDisplayArea(
                             }
                             // Action buttons
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
+                                JButton(
                                     onClick = { model.resetPageOrder() },
                                     enabled = !model.isSaving && model.hasPageChanges
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Undo,
                                         contentDescription = "Reset",
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
                                     Spacer(Modifier.width(4.dp))
-                                    JText("Reset order")
+                                    JText(
+                                        text = "Reset order",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                                 // Save (overwrite)
-                                Button(
+                                JButton(
                                     onClick = { model.saveChanges() },
                                     enabled = !model.isSaving
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Save,
                                         contentDescription = "Save",
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
                                     Spacer(Modifier.width(4.dp))
-                                    JText("Save")
+                                    JText(
+                                        text = "Save",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                                 // Save As
-                                Button(
+                                JButton(
                                     onClick = { showSaveAsDialog = true },
                                     enabled = !model.isSaving
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.SaveAs,
                                         contentDescription = "Save As",
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
                                     Spacer(Modifier.width(4.dp))
-                                    JText("Save As")
+                                    JText(
+                                        text = "Save As",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
                         }
