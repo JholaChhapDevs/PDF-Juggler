@@ -1,39 +1,15 @@
 package com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.SaveAs
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
@@ -41,37 +17,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JButton
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
+import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiChatComponent
+import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiScreenModel
+import com.jholachhapdevs.pdfjuggler.feature.tts.ui.TTSViewModel
+import com.jholachhapdevs.pdfjuggler.feature.tts.ui.TTSFloatingCloseButton
+import com.jholachhapdevs.pdfjuggler.feature.tts.ui.TTSProgressBar
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveDialog
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfLeft
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfMid
 
 @Composable
-fun PdfSearchBar(model: TabScreenModel) {
+fun PdfSearchBar(
+    model: TabScreenModel,
+    isVisible: Boolean,
+    onDismiss: () -> Unit
+) {
     val cs = MaterialTheme.colorScheme
     var query by remember { mutableStateOf(model.searchQuery) }
-    var isSearchVisible by remember { mutableStateOf(false) }
-    
-    // Search toggle button (positioned to trigger the popup)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End
-    ) {
-        JButton(
-            onClick = { isSearchVisible = !isSearchVisible },
-            modifier = Modifier.padding(8.dp)
-        ) {
-            Text(if (isSearchVisible) "Hide Search" else "Search")
-        }
-    }
-    
-    // Search popup positioned on the right side
-    if (isSearchVisible) {
+
+    if (isVisible) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .onKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
-                        isSearchVisible = false
+                        onDismiss()
                         true
                     } else {
                         false
@@ -105,16 +75,16 @@ fun PdfSearchBar(model: TabScreenModel) {
                             fontWeight = FontWeight.Medium,
                             color = cs.onSurface
                         )
-                        
+
                         JButton(
-                            onClick = { isSearchVisible = false },
+                            onClick = onDismiss,
                             modifier = Modifier.size(32.dp),
                             contentPadding = PaddingValues(4.dp)
                         ) {
                             Text("✕")
                         }
                     }
-                    
+
                     // Search input field
                     OutlinedTextField(
                         value = query,
@@ -126,7 +96,7 @@ fun PdfSearchBar(model: TabScreenModel) {
                         label = { JText("Search text") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    
+
                     // Search results and controls
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -135,13 +105,13 @@ fun PdfSearchBar(model: TabScreenModel) {
                     ) {
                         val total = model.searchMatches.size
                         val current = if (model.currentSearchIndex >= 0) model.currentSearchIndex + 1 else 0
-                        
+
                         JText(
                             text = "$current of $total",
                             style = MaterialTheme.typography.bodySmall,
                             color = cs.onSurfaceVariant
                         )
-                        
+
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -151,7 +121,7 @@ fun PdfSearchBar(model: TabScreenModel) {
                             ) {
                                 Text("Previous")
                             }
-                            
+
                             JButton(
                                 onClick = { model.goToNextMatch() },
                                 enabled = total > 0
@@ -168,7 +138,11 @@ fun PdfSearchBar(model: TabScreenModel) {
 
 @Composable
 fun PdfDisplayArea(
-    model: TabScreenModel
+    model: TabScreenModel,
+    aiScreenModel: AiScreenModel? = null,
+    ttsViewModel: TTSViewModel? = null,
+    isSearchVisible: Boolean = false,
+    onSearchVisibilityChange: (Boolean) -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     var showSaveAsDialog by remember { mutableStateOf(false) }
@@ -180,7 +154,23 @@ fun PdfDisplayArea(
             listState.scrollToItem(idx, 0)
         }
     }
-    
+
+    // Keep AI model in sync with the current selected page
+    LaunchedEffect(model.selectedPageIndex) {
+        aiScreenModel?.setSelectedPage(model.selectedPageIndex)
+    }
+
+    // Handle pending AI requests from context menu
+    LaunchedEffect(model.pendingAiRequest) {
+        val pendingRequest = model.pendingAiRequest
+        if (pendingRequest != null && aiScreenModel != null) {
+            // Process the pending request
+            aiScreenModel.processPendingRequest(pendingRequest.text, pendingRequest.mode)
+            // Clear the pending request
+            model.clearPendingAiRequest()
+        }
+    }
+
     if (model.isLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -195,7 +185,7 @@ fun PdfDisplayArea(
                 .onKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown && event.isCtrlPressed) {
                         when (event.key) {
-                            Key.F -> { /* Search shortcut handled by PdfSearchBar */; true }
+                            Key.F -> { onSearchVisibilityChange(!isSearchVisible); true }
                             else -> false
                         }
                     } else {
@@ -205,8 +195,19 @@ fun PdfDisplayArea(
                 .focusable()
         ) {
             Column(Modifier.fillMaxSize()) {
-                // Save Controls Bar (shown when there are page changes)
-                if (model.hasPageChanges) {
+                // TTS simple progress bar (when TTS is active)
+                ttsViewModel?.let { tts ->
+                    TTSProgressBar(
+                        isActive = tts.isPlaying,
+                        currentWords = tts.currentWords,
+                        currentWordIndex = tts.currentWordIndex,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                
+                // Unified Save Controls Bar (shown when any changes exist)
+                val hasAnyUnsaved = model.hasPageChanges || model.hasUnsavedBookmarks || model.hasUnsavedHighlights
+                if (hasAnyUnsaved) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -229,13 +230,18 @@ fun PdfDisplayArea(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                val parts = buildList {
+                                    if (model.hasPageChanges) add("page order")
+                                    if (model.hasUnsavedBookmarks) add("bookmarks")
+                                    if (model.hasUnsavedHighlights) add("highlights")
+                                }
+                                val msg = if (parts.isEmpty()) "Unsaved changes" else "Unsaved: " + parts.joinToString(", ")
                                 JText(
-                                    text = "Pages have been reordered",
+                                    text = msg,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
-                                
                                 if (model.isSaving) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(16.dp),
@@ -244,43 +250,63 @@ fun PdfDisplayArea(
                                     )
                                 }
                             }
-                            
                             // Action buttons
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // Reset button
-                                OutlinedButton(
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                JButton(
                                     onClick = { model.resetPageOrder() },
-                                    enabled = !model.isSaving
+                                    enabled = !model.isSaving && model.hasPageChanges
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Undo,
                                         contentDescription = "Reset",
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
                                     Spacer(Modifier.width(4.dp))
-                                    JText("Reset")
+                                    JText(
+                                        text = "Reset order",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
-                                
-                                // Save As button
-                                Button(
+                                // Save (overwrite)
+                                JButton(
+                                    onClick = { model.saveChanges() },
+                                    enabled = !model.isSaving
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Save,
+                                        contentDescription = "Save",
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    JText(
+                                        text = "Save",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                // Save As
+                                JButton(
                                     onClick = { showSaveAsDialog = true },
                                     enabled = !model.isSaving
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.SaveAs,
                                         contentDescription = "Save As",
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
                                     )
                                     Spacer(Modifier.width(4.dp))
-                                    JText("Save As")
+                                    JText(
+                                        text = "Save As",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
                         }
                     }
                 }
-                
+
                 // Main content
                 Row(Modifier.fillMaxSize()) {
                     // Hide left pane when in fullscreen mode
@@ -303,21 +329,30 @@ fun PdfDisplayArea(
                             listState = listState
                         )
                     }
+
                     val originalPageIndex = model.getOriginalPageIndex(model.selectedPageIndex)
                     val pageSizePts = model.getPageSizePointsForDisplayIndex(model.selectedPageIndex)
-                    
                     val textDataForPage = model.allTextDataWithCoordinates[originalPageIndex] ?: emptyList()
-                   PdfMid(
+
+                    // In PdfDisplayArea.kt, update the PdfMid() call with these new parameters:
+
+                    PdfMid(
                         modifier = Modifier
-                            .weight(if (model.isFullscreen) 1f else 0.85f)
-                            .fillMaxSize()
-                            .padding(top = 24.dp), // add gap only above the PDF area
+                            .weight(if (model.isFullscreen) {
+                                1f
+                            } else if (aiScreenModel != null) {
+                                0.55f
+                            } else {
+                                0.85f
+                            })
+                            .fillMaxSize(),
                         pageImage = model.currentPageImage,
                         textData = textDataForPage,
                         rotation = model.currentRotation,
                         isFullscreen = model.isFullscreen,
                         onTextSelected = { selectedText ->
-                            // Handle selected text (no logging)
+                            // Handle selected text for TTS
+                            ttsViewModel?.setTextToSpeak(selectedText)
                         },
                         onViewportChanged = { viewport ->
                             model.onViewportChanged(viewport)
@@ -335,16 +370,77 @@ fun PdfDisplayArea(
                         onZoomChanged = { z -> model.onZoomChanged(z) },
                         searchHighlightPositions = model.currentMatchForDisplayedPage(),
                         scrollToMatchTrigger = model.scrollToMatchTrigger,
-                        pageIndex = originalPageIndex
+                        pageIndex = originalPageIndex,
+                        pageHighlights = model.getHighlightsForDisplayedPage(),
+                        onAddHighlight = { rects, color ->
+                            if (rects.isNotEmpty()) {
+                                model.addHighlightForDisplayedPage(rects, color, model.currentRotation)
+                            }
+                        },
+                        onDictionaryRequest = { text -> model.requestAiDictionary(text) },
+                        onTranslateRequest = { text -> model.requestAiTranslate(text) },
+                        onSpeakRequest = { text -> 
+                            ttsViewModel?.let { tts ->
+                                tts.setTextToSpeak(text)
+                                tts.play()
+                            }
+                        },
+                        showToolbar = false,
+                        externalZoom = model.currentZoom,
+                        onZoomIn = { model.zoomIn() },
+                        onZoomOut = { model.zoomOut() },
+                        onResetZoom = { model.resetZoom() },
+                        // NEW: Navigation parameters
+                        currentPageIndex = model.selectedPageIndex,
+                        totalPages = model.totalPages,
+                        onPreviousPage = {
+                            if (model.selectedPageIndex > 0) {
+                                model.selectPage(model.selectedPageIndex - 1)
+                            }
+                        },
+                        onNextPage = {
+                            if (model.selectedPageIndex < model.totalPages - 1) {
+                                model.selectPage(model.selectedPageIndex + 1)
+                            }
+                        }
+                    )
+                    // AI Chat panel (only show when enabled and not in fullscreen)
+                    aiScreenModel?.let { screenModel ->
+                        if (!model.isFullscreen) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(0.3f)
+                                    .fillMaxSize()
+                                    .padding(start = 8.dp)
+                            ) {
+                                AiChatComponent(screenModel = screenModel)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Search popup overlay (positioned on top-right)
+            PdfSearchBar(
+                model = model,
+                isVisible = isSearchVisible,
+                onDismiss = { onSearchVisibilityChange(false) }
+            )
+            
+            // Floating TTS close button (when TTS is active)
+            ttsViewModel?.let { tts ->
+                if (tts.isPlaying) {
+                    TTSFloatingCloseButton(
+                        onClose = { tts.stop() },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp)
                     )
                 }
             }
-            
-            // Search popup overlay (positioned on top-right)
-            PdfSearchBar(model)
         }
     }
-    
+
     // Save dialogs
     SaveDialog(
         isOpen = showSaveAsDialog,
@@ -353,7 +449,7 @@ fun PdfDisplayArea(
         onDismiss = { showSaveAsDialog = false },
         onSave = { path ->
             showSaveAsDialog = false
-            model.savePdfAs(path)
+            model.saveChangesAs(path)
         },
         onValidatePath = { path -> model.validateSavePath(path) }
     )

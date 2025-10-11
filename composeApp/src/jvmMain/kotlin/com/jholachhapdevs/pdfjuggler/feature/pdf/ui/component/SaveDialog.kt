@@ -115,7 +115,7 @@ fun SaveDialog(
                             isError = validationResult is ValidationResult.Error
                         )
                         
-                        Button(
+                        JButton(
                             onClick = {
                                 val fileChooser = JFileChooser().apply {
                                     dialogTitle = "Save PDF As"
@@ -146,7 +146,10 @@ fun SaveDialog(
                             },
                             modifier = Modifier.height(56.dp)
                         ) {
-                            JText("Browse")
+                            JText(
+                                text = "Browse",
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                     
@@ -216,11 +219,14 @@ fun SaveDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                     ) {
-                        TextButton(onClick = onDismiss) {
-                            JText("Cancel")
+                        JButton(onClick = onDismiss) {
+                            JText(
+                                text = "Cancel",
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                         
-                        Button(
+                        JButton(
                             onClick = { 
                                 if (selectedPath.isNotBlank()) {
                                     onSave(selectedPath)
@@ -231,10 +237,14 @@ fun SaveDialog(
                             Icon(
                                 imageVector = Icons.Filled.Save,
                                 contentDescription = "Save",
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
                             )
                             Spacer(Modifier.width(8.dp))
-                            JText("Save")
+                            JText(
+                                text = "Save",
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
@@ -302,8 +312,11 @@ fun SaveResultDialog(
                 }
             },
             confirmButton = {
-                Button(onClick = onDismiss) {
-                    JText("OK")
+                JButton(onClick = onDismiss) {
+                    JText(
+                        text = "OK",
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         )

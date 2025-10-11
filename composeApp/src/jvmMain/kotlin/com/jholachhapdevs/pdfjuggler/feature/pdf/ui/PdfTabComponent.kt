@@ -11,6 +11,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.jholachhapdevs.pdfjuggler.feature.ai.data.remote.GeminiRemoteDataSource
+import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.SendPromptUseCase
+import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.UploadFileUseCase
+import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiScreenModel
 import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -21,11 +25,14 @@ import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.AdvancedPrintOptio
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.PrintProgressDialog
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.TabBar
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SplitViewComponent
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.PdfDisplayArea
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.PdfTab
 import com.jholachhapdevs.pdfjuggler.service.PdfGenerationService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.jholachhapdevs.pdfjuggler.feature.tts.rememberTTSViewModel
 
 @Composable
 fun PdfTabComponent(
@@ -37,8 +44,12 @@ fun PdfTabComponent(
     var showPrintOptionsDialog by remember { mutableStateOf(false) }
     var showProgressDialog by remember { mutableStateOf(false) }
     var progressMessage by remember { mutableStateOf("Printing...") }
+    var isSearchVisible by remember { mutableStateOf(false) }
 
     val pdfGenerationService = remember { PdfGenerationService() }
+
+    // Create a single TTS ViewModel scoped to this component
+    val ttsViewModel = rememberTTSViewModel()
 
     // If no tabs, exit to the previous screen
     if (model.tabs.isEmpty()) {
@@ -57,19 +68,103 @@ fun PdfTabComponent(
             }
         }
 
+        // Observe pending AI request on the current tab and auto-enable AI chat panel
+        val currentTabModel = model.getCurrentTabModel()
+        val pendingAi = currentTabModel?.pendingAiRequest
+        LaunchedEffect(pendingAi) {
+            if (pendingAi != null) {
+                println("DEBUG: Pending AI request detected: ${pendingAi.mode} for text: '${pendingAi.text.take(50)}...'")
+                model.setAiChatVisible(true)
+                println("DEBUG: AI chat enabled: ${model.isAiChatEnabled}")
+            }
+        }
+
         Scaffold(
             topBar = {
+                // Get fresh tab model on every recomposition
+                val currentTabModel = (model.current as? PdfTab)?.let { model.getTabModel(it) }
+
                 TabBar(
                     tabs = model.tabs,
                     onAdd = { model.addTabFromPicker() },
-                    onSelect = { tab -> model.selectTab(tab) },
+                    onSelect = { tab ->
+                        
+                        model.selectTab(tab)
+                    },
                     onClose = { tab -> model.closeTab(tab) },
                     onPrint = { showPrintOptionsDialog = true },
                     isSplitViewEnabled = model.isSplitViewEnabled,
-                    onToggleSplitView = { model.toggleSplitView() }
+                    onToggleSplitView = {
+                        println("DEBUG: Toggle split view clicked")
+                        model.toggleSplitView()
+                    },
+                    isAiChatEnabled = model.isAiChatEnabled,
+                    onToggleAiChat = {
+                        println("DEBUG: Toggle AI chat clicked")
+                        model.toggleAiChat()
+                    },
+                    // PDF Viewer controls
+                    zoomFactor = currentTabModel?.currentZoom ?: 1f,
+                    minZoom = 0.25f,
+                    isFullscreen = currentTabModel?.isFullscreen ?: false,
+                    onZoomIn = {
+                        val tabModel = (model.current as? PdfTab)?.let { model.getTabModel(it) }
+                        println("DEBUG: Zoom in clicked - tabModel exists: ${tabModel != null}")
+                        tabModel?.let {
+                            println("DEBUG: Calling zoomIn() - current zoom: ${it.currentZoom}")
+                            it.zoomIn()
+                        } ?: println("ERROR: tabModel is null for zoomIn!")
+                    },
+                    onZoomOut = {
+                        val tabModel = (model.current as? PdfTab)?.let { model.getTabModel(it) }
+                        println("DEBUG: Zoom out clicked - tabModel exists: ${tabModel != null}")
+                        tabModel?.let {
+                            println("DEBUG: Calling zoomOut() - current zoom: ${it.currentZoom}")
+                            it.zoomOut()
+                        } ?: println("ERROR: tabModel is null for zoomOut!")
+                    },
+                    onResetZoom = {
+                        val tabModel = (model.current as? PdfTab)?.let { model.getTabModel(it) }
+                        println("DEBUG: Reset zoom clicked - tabModel exists: ${tabModel != null}")
+                        tabModel?.let {
+                            println("DEBUG: Calling resetZoom() - current zoom: ${it.currentZoom}")
+                            it.resetZoom()
+                        } ?: println("ERROR: tabModel is null for resetZoom!")
+                    },
+                    onRotateClockwise = {
+                        val tabModel = (model.current as? PdfTab)?.let { model.getTabModel(it) }
+                        println("DEBUG: Rotate clockwise clicked - tabModel exists: ${tabModel != null}")
+                        tabModel?.let {
+                            println("DEBUG: Calling rotateClockwise() - current rotation: ${it.currentRotation}")
+                            it.rotateClockwise()
+                        } ?: println("ERROR: tabModel is null for rotateClockwise!")
+                    },
+                    onRotateCounterClockwise = {
+                        val tabModel = (model.current as? PdfTab)?.let { model.getTabModel(it) }
+                        println("DEBUG: Rotate counter-clockwise clicked - tabModel exists: ${tabModel != null}")
+                        tabModel?.let {
+                            println("DEBUG: Calling rotateCounterClockwise() - current rotation: ${it.currentRotation}")
+                            it.rotateCounterClockwise()
+                        } ?: println("ERROR: tabModel is null for rotateCounterClockwise!")
+                    },
+                    onToggleFullscreen = {
+                        val tabModel = (model.current as? PdfTab)?.let { model.getTabModel(it) }
+                        println("DEBUG: Toggle fullscreen clicked - tabModel exists: ${tabModel != null}")
+                        tabModel?.let {
+                            println("DEBUG: Calling toggleFullscreen() - is fullscreen: ${it.isFullscreen}")
+                            it.toggleFullscreen()
+                        } ?: println("ERROR: tabModel is null for toggleFullscreen!")
+                    },
+                    onSearchClick = {
+                        println("DEBUG: Search clicked - toggling visibility")
+                        isSearchVisible = !isSearchVisible
+                    }
                 )
             }
         ) { padding ->
+            // Get fresh tab model for content area
+            val currentTabModel = (model.current as? PdfTab)?.let { model.getTabModel(it) }
+
             Box(
                 Modifier
                     .fillMaxSize()
@@ -82,11 +177,46 @@ fun PdfTabComponent(
                         rightModel = model.getTabModel(model.splitViewRightTab),
                         availableTabs = model.tabs,
                         onLeftTabChange = { tab -> model.setSplitViewLeft(tab) },
-                        onRightTabChange = { tab -> model.setSplitViewRight(tab) }
+                        onRightTabChange = { tab -> model.setSplitViewRight(tab) },
+                        ttsViewModel = ttsViewModel
                     )
+                } else if (model.isAiChatEnabled) {
+                    // AI chat mode - show PDF with AI chat panel
+                    if (currentTabModel != null) {
+                        // Create AiScreenModel for the current tab
+                        val remote = remember { GeminiRemoteDataSource() }
+                        val aiScreenModel = remember(currentTabModel.pdfFile.path) {
+                            AiScreenModel(
+                                pdfFile = currentTabModel.pdfFile,
+                                sendPromptUseCase = SendPromptUseCase(remote),
+                                uploadFileUseCase = UploadFileUseCase(remote),
+                                initialSelectedPageIndex = currentTabModel.selectedPageIndex
+                            )
+                        }
+
+                        PdfDisplayArea(
+                            model = currentTabModel,
+                            aiScreenModel = aiScreenModel,
+                            ttsViewModel = ttsViewModel,
+                            isSearchVisible = isSearchVisible,
+                            onSearchVisibilityChange = { isSearchVisible = it }
+                        )
+                    } else {
+                        CurrentTab()
+                    }
                 } else {
                     // Normal single view mode
-                    CurrentTab()
+                    if (currentTabModel != null) {
+                        PdfDisplayArea(
+                            model = currentTabModel,
+                            aiScreenModel = null,
+                            ttsViewModel = ttsViewModel,
+                            isSearchVisible = isSearchVisible,
+                            onSearchVisibilityChange = { isSearchVisible = it }
+                        )
+                    } else {
+                        CurrentTab()
+                    }
                 }
             }
         }
@@ -96,7 +226,7 @@ fun PdfTabComponent(
                 onDismiss = { showPrintOptionsDialog = false },
                 onConfirm = { printOptions ->
                     showPrintOptionsDialog = false
-                    val currentTabModel = model.getCurrentTabModel()
+                    val currentTabModel = (model.current as? PdfTab)?.let { model.getTabModel(it) }
 
                     if (currentTabModel != null) {
                         showProgressDialog = true
@@ -126,7 +256,6 @@ fun PdfTabComponent(
                                 e.printStackTrace()
                             }
                         }
-                    } else {
                     }
                 }
             )
@@ -139,8 +268,8 @@ fun PdfTabComponent(
                     // Only allow dismissal if not actively processing
                     if (progressMessage.contains("Error") ||
                         progressMessage.contains("success") ||
-                        progressMessage.contains("cancelled") ||
-                        progressMessage.contains("completed")) {
+                        progressMessage.contains("completed")
+                    ) {
                         showProgressDialog = false
                     }
                 }

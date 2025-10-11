@@ -14,12 +14,16 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.jholachhapdevs.pdfjuggler.core.ui.components.JButton
+import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 
 @Composable
 fun PrintProgressDialog(
     message: String,
     onDismiss: () -> Unit
 ) {
+    val cs = MaterialTheme.colorScheme
+    
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
@@ -27,7 +31,7 @@ fun PrintProgressDialog(
                 .wrapContentHeight(),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
+                containerColor = cs.surface
             )
         ) {
             Column(
@@ -44,7 +48,7 @@ fun PrintProgressDialog(
                             imageVector = Icons.Default.Error,
                             contentDescription = "Error",
                             modifier = Modifier.size(56.dp),
-                            tint = MaterialTheme.colorScheme.error
+                            tint = cs.error
                         )
                     }
                     message.contains("success", ignoreCase = true) ||
@@ -53,7 +57,7 @@ fun PrintProgressDialog(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = "Success",
                             modifier = Modifier.size(56.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = cs.primary
                         )
                     }
                     message.contains("cancelled", ignoreCase = true) -> {
@@ -61,7 +65,7 @@ fun PrintProgressDialog(
                             imageVector = Icons.Default.Print,
                             contentDescription = "Cancelled",
                             modifier = Modifier.size(56.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = cs.onSurfaceVariant
                         )
                     }
                     else -> {
@@ -85,25 +89,25 @@ fun PrintProgressDialog(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .rotate(rotation),
-                                color = MaterialTheme.colorScheme.primary,
+                                color = cs.primary,
                                 strokeWidth = 4.dp
                             )
                             Icon(
                                 imageVector = Icons.Default.Print,
                                 contentDescription = "Printing",
                                 modifier = Modifier.size(28.dp),
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = cs.primary
                             )
                         }
                     }
                 }
 
                 // Message
-                Text(
+                JText(
                     text = message,
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = cs.onSurface
                 )
 
                 // Close button (only show when done or error)
@@ -112,14 +116,14 @@ fun PrintProgressDialog(
                     message.contains("completed", ignoreCase = true) ||
                     message.contains("cancelled", ignoreCase = true)) {
 
-                    Button(
+                    JButton(
                         onClick = onDismiss,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Close")
+                        JText(
+                            text = "Close",
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }

@@ -15,6 +15,7 @@ ktor = "3.2.3"
 datastore = "1.1.7"
 kotlinxSerializationJson = "1.9.0"
 coil = "3.3.0"
+markdown = "0.27.0"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -26,6 +27,11 @@ kotlinx-coroutinesSwing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-s
 
 
 # basics
+
+# markdown
+markdown = { module = "com.mikepenz:multiplatform-markdown-renderer", version.ref = "markdown" }
+markdown-m3 = { module = "com.mikepenz:multiplatform-markdown-renderer-m3", version.ref = "markdown" }
+
 # voyager
 navigator = { group = "cafe.adriel.voyager", name = "voyager-navigator", version.ref = "voyager" }
 navigator-tabs = { group = "cafe.adriel.voyager", name = "voyager-tab-navigator", version.ref = "voyager" }
@@ -99,6 +105,8 @@ basics = [
     "material-kolor",
     "colorpicker-compose",
 
-    "pdfbox"
+    "pdfbox",
+    "markdown",
+    "markdown-m3"
 ]
 

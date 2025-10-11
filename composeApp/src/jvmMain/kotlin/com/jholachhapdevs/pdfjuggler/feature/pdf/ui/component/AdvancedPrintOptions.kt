@@ -10,13 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,6 +25,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.jholachhapdevs.pdfjuggler.core.ui.components.JButton
+import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,9 +39,17 @@ fun AdvancedPrintOptionsDialog(
     var includeAnnotations by remember { mutableStateOf(true) }
     var expanded by remember { mutableStateOf(false) }
 
+    val cs = MaterialTheme.colorScheme
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Advanced Print Options") },
+        title = { 
+            JText(
+                text = "Advanced Print Options",
+                style = MaterialTheme.typography.headlineSmall,
+                color = cs.onSurface
+            )
+        },
         text = {
             Column {
                 // Pages per sheet dropdown
@@ -49,12 +58,19 @@ fun AdvancedPrintOptionsDialog(
                         value = "$pagesPerSheet",
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Pages per Sheet") },
+                        label = { 
+                            JText(
+                                text = "Pages per Sheet",
+                                color = cs.onSurfaceVariant
+                            )
+                        },
                         trailingIcon = {
                             Icon(
                                 Icons.Default.ArrowDropDown,
                                 "Dropdown",
-                                Modifier.clickable { expanded = true })
+                                modifier = Modifier.clickable { expanded = true },
+                                tint = cs.onSurfaceVariant
+                            )
                         }
                     )
                     DropdownMenu(
@@ -63,7 +79,12 @@ fun AdvancedPrintOptionsDialog(
                     ) {
                         listOf(1, 2, 4, 8).forEach { numPages ->
                             DropdownMenuItem(
-                                text = { Text("$numPages") },
+                                text = { 
+                                    JText(
+                                        text = "$numPages",
+                                        color = cs.onSurface
+                                    )
+                                },
                                 onClick = {
                                     pagesPerSheet = numPages
                                     expanded = false
@@ -81,7 +102,11 @@ fun AdvancedPrintOptionsDialog(
                         checked = bookletFormat,
                         onCheckedChange = { bookletFormat = it }
                     )
-                    Text("Booklet Format", modifier = Modifier.padding(start = 8.dp))
+                    JText(
+                        text = "Booklet Format",
+                        modifier = Modifier.padding(start = 8.dp),
+                        color = cs.onSurface
+                    )
                 }
 
                 // Include annotations checkbox
@@ -90,12 +115,16 @@ fun AdvancedPrintOptionsDialog(
                         checked = includeAnnotations,
                         onCheckedChange = { includeAnnotations = it }
                     )
-                    Text("Include Annotations", modifier = Modifier.padding(start = 8.dp))
+                    JText(
+                        text = "Include Annotations",
+                        modifier = Modifier.padding(start = 8.dp),
+                        color = cs.onSurface
+                    )
                 }
             }
         },
         confirmButton = {
-            Button(
+            JButton(
                 onClick = {
                     onConfirm(
                         PrintOptions(
@@ -106,14 +135,23 @@ fun AdvancedPrintOptionsDialog(
                     )
                 }
             ) {
-                Text("Print")
+                JText(
+                    text = "Print",
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         },
         dismissButton = {
-            Button(onClick = onDismiss) {
-                Text("Cancel")
+            JButton(onClick = onDismiss) {
+                JText(
+                    text = "Cancel",
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
-        }
+        },
+        containerColor = cs.surface,
+        titleContentColor = cs.onSurface,
+        textContentColor = cs.onSurface
     )
 }
 

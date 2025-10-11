@@ -1,0 +1,258 @@
+package com.jholachhapdevs.pdfjuggler.feature.tts
+
+import com.jholachhapdevs.pdfjuggler.feature.tts.domain.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
+import com.sun.speech.freetts.VoiceManager
+import com.sun.speech.freetts.Voice
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+
+/**
+ * FreeTTS implementation of the TTS service
+ */
+class FreeTTSService : TTSService {
+
+    private var voice: Voice? = null
+    private val isInitialized = AtomicBoolean(false)
+    private var currentConfig = TTSConfig()
+    private val isSpeaking = AtomicBoolean(false)
+    private var speechJob: Job? = null
+    private var currentWords: List<String> = emptyList()
+    private val _currentWordIndex = MutableStateFlow(-1)
+    val currentWordIndex: StateFlow<Int> = _currentWordIndex.asStateFlow()
+
+    private val _state = MutableStateFlow(TTSState.IDLE)
+    override val state: StateFlow<TTSState> = _state.asStateFlow()
+
+    private val _playbackInfo = MutableStateFlow<TTSPlaybackInfo?>(null)
+    override val playbackInfo: StateFlow<TTSPlaybackInfo?> = _playbackInfo.asStateFlow()
+
+    override suspend fun initialize(): TTSResult = withContext(Dispatchers.IO) {
+        try {
+            if (isInitialized.get()) {
+                return@withContext TTSResult.Success
+            }
+
+            _state.value = TTSState.IDLE
+            
+            // Set system property for FreeTTS voices
+            System.setProperty("freetts.voices", "com.sun.speech.freetts.en.us.cmu_us_kal.KevinVoiceDirectory")
+            
+            // Initialize FreeTTS
+            val voiceManager = VoiceManager.getInstance()
+            voice = voiceManager.getVoice("kevin16")
+            
+            if (voice == null) {
+                // Try alternative voice names
+                voice = voiceManager.getVoice("kevin") 
+                    ?: voiceManager.getVoice("alan")
+                    ?: voiceManager.getVoice("unlimited_domain")
+            }
+            
+            if (voice == null) {
+                return@withContext TTSResult.Error("No FreeTTS voice available")
+            }
+            
+            voice?.allocate()
+            
+            isInitialized.set(true)
+            TTSResult.Success
+        } catch (e: Exception) {
+            _state.value = TTSState.ERROR
+            TTSResult.Error("Failed to initialize FreeTTS: ${e.message}", e)
+        }
+    }
+
+    override suspend fun speak(text: String, config: TTSConfig): TTSResult = withContext(Dispatchers.IO) {
+        try {
+            if (!isInitialized.get()) {
+                val initResult = initialize()
+                if (initResult is TTSResult.Error) {
+                    return@withContext initResult
+                }
+            }
+
+            val currentVoice = voice ?: return@withContext TTSResult.Error("FreeTTS voice not available")
+
+            // Stop any current playback
+            stop()
+            
+            // Split text into words for tracking
+            currentWords = text.split("\\s+".toRegex()).filter { it.isNotBlank() }
+            _currentWordIndex.value = -1
+            
+            _state.value = TTSState.SPEAKING
+            isSpeaking.set(true)
+            _playbackInfo.value = TTSPlaybackInfo(
+                totalText = text,
+                currentPosition = 0,
+                isPlaying = true,
+                config = config
+            )
+
+            // Configure voice settings to match word tracking
+            currentVoice.rate = 120f // Fixed rate to match word tracking timing
+            currentVoice.pitch = (config.pitch * 100).toFloat()
+            currentVoice.volume = config.volume
+            
+            // Start word-by-word tracking job
+            speechJob = launch {
+                startWordTracking()
+            }
+            
+            // Speak the text
+            val success = currentVoice.speak(text)
+            
+            // Cancel word tracking
+            speechJob?.cancel()
+            _currentWordIndex.value = -1
+            
+            isSpeaking.set(false)
+            
+            if (_state.value == TTSState.SPEAKING) {
+                if (success) {
+                    _state.value = TTSState.IDLE
+                } else {
+                    _state.value = TTSState.ERROR
+                    return@withContext TTSResult.Error("TTS playback failed")
+                }
+            }
+            
+            _playbackInfo.value = _playbackInfo.value?.copy(isPlaying = false)
+
+            TTSResult.Success
+        } catch (e: Exception) {
+            speechJob?.cancel()
+            _currentWordIndex.value = -1
+            _state.value = TTSState.ERROR
+            isSpeaking.set(false)
+            _playbackInfo.value = _playbackInfo.value?.copy(isPlaying = false)
+            TTSResult.Error("Failed to speak text: ${e.message}", e)
+        }
+    }
+
+    override suspend fun pause(): TTSResult = withContext(Dispatchers.IO) {
+        try {
+            // Stop speech job and word tracking
+            speechJob?.cancel()
+            speechJob = null
+            _currentWordIndex.value = -1
+            
+            // FreeTTS doesn't have built-in pause functionality
+            // We'll just stop the speech and mark as paused
+            _state.value = TTSState.PAUSED
+            isSpeaking.set(false)
+            _playbackInfo.value = _playbackInfo.value?.copy(isPlaying = false)
+            TTSResult.Success
+        } catch (e: Exception) {
+            TTSResult.Error("Failed to pause: ${e.message}", e)
+        }
+    }
+
+    override suspend fun resume(): TTSResult = withContext(Dispatchers.IO) {
+        // Since FreeTTS doesn't support pause/resume, we restart from beginning
+        val currentText = _playbackInfo.value?.totalText
+        if (!currentText.isNullOrBlank()) {
+            speak(currentText, currentConfig)
+        } else {
+            _state.value = TTSState.IDLE
+            TTSResult.Success
+        }
+    }
+
+    private suspend fun startWordTracking() {
+        // Small initial delay to sync with FreeTTS speech start
+        delay(200)
+        
+        // More accurate timing based on actual FreeTTS rate
+        // FreeTTS at 120 WPM with pauses and punctuation consideration
+        val baseWordsPerMinute = 120f
+        val millisecondsPerWord = (60000f / baseWordsPerMinute).toLong()
+        
+        for (i in currentWords.indices) {
+            if (!isSpeaking.get() || _state.value != TTSState.SPEAKING) break
+            
+            _currentWordIndex.value = i
+            
+            // Dynamic timing based on word length and punctuation
+            val currentWord = currentWords[i]
+            val wordDelay = when {
+                currentWord.length > 8 -> (millisecondsPerWord * 1.3).toLong() // Longer words take more time
+                currentWord.endsWith(".") || currentWord.endsWith("!") || currentWord.endsWith("?") -> 
+                    (millisecondsPerWord * 1.8).toLong() // Pause after sentences
+                currentWord.endsWith(",") || currentWord.endsWith(";") -> 
+                    (millisecondsPerWord * 1.4).toLong() // Pause after commas
+                else -> millisecondsPerWord
+            }
+            
+            delay(wordDelay)
+        }
+        
+        _currentWordIndex.value = -1
+    }
+
+    override suspend fun stop(): TTSResult = withContext(Dispatchers.IO) {
+        try {
+            // Stop speech job and word tracking
+            speechJob?.cancel()
+            speechJob = null
+            _currentWordIndex.value = -1
+            
+            // Update state
+            _state.value = TTSState.STOPPED
+            isSpeaking.set(false)
+            _playbackInfo.value = _playbackInfo.value?.copy(isPlaying = false)
+            
+            // Reset to idle after stopping
+            _state.value = TTSState.IDLE
+            TTSResult.Success
+        } catch (e: Exception) {
+            TTSResult.Error("Failed to stop: ${e.message}", e)
+        }
+    }
+
+    override fun isSpeaking(): Boolean {
+        return isSpeaking.get() || _state.value == TTSState.SPEAKING
+    }
+
+    override fun getAvailableVoices(): List<String> {
+        return try {
+            val voiceManager = VoiceManager.getInstance()
+            voiceManager.voices?.map { it.name } ?: listOf("kevin16")
+        } catch (e: Exception) {
+            listOf("kevin16") // Default voice
+        }
+    }
+
+    override suspend fun setConfig(config: TTSConfig): TTSResult {
+        currentConfig = config
+        return TTSResult.Success
+    }
+
+    override fun release() {
+        try {
+            // Stop speech job
+            speechJob?.cancel()
+            speechJob = null
+            _currentWordIndex.value = -1
+            
+            voice?.let { currentVoice ->
+                currentVoice.deallocate()
+            }
+            voice = null
+            isInitialized.set(false)
+            isSpeaking.set(false)
+            _state.value = TTSState.IDLE
+            _playbackInfo.value = null
+        } catch (e: Exception) {
+            // Log error but don't throw
+            println("Error releasing FreeTTS resources: ${e.message}")
+        }
+    }
+}

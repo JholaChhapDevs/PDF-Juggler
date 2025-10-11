@@ -30,6 +30,10 @@ class PdfTabScreenModel(
         private set
     var splitViewRightTab: Tab? by mutableStateOf(null)
         private set
+        
+    // AI chat support
+    var isAiChatEnabled by mutableStateOf(false)
+        private set
 
     private val contentCache = LinkedHashMap<String, TabScreenModel>()
 
@@ -82,7 +86,13 @@ class PdfTabScreenModel(
     }
 
     private fun getOrCreateModel(file: PdfFile): TabScreenModel {
-        return contentCache.getOrPut(file.path) { TabScreenModel(file, window) }
+        return contentCache.getOrPut(file.path) { 
+            TabScreenModel(
+                pdfFile = file, 
+                window = window,
+                onAiChatRequest = { setAiChatVisible(true) }
+            ) 
+        }
     }
 
     // Split view functions
@@ -122,6 +132,14 @@ class PdfTabScreenModel(
         } else {
             enableSplitView()
         }
+    }
+    
+    // AI chat functions
+    fun toggleAiChat() {
+        isAiChatEnabled = !isAiChatEnabled
+    }
+    fun setAiChatVisible(enabled: Boolean) {
+        isAiChatEnabled = enabled
     }
 
     fun getTabModel(tab: Tab?): TabScreenModel? {

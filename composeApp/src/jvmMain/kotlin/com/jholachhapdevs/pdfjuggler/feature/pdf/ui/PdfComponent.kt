@@ -34,7 +34,8 @@ fun PdfComponent(
         modifier = Modifier
             .fillMaxSize()
             .background(cs.background)
-            .padding(24.dp),
+            .padding(24.dp)
+            .padding(top = 30.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(

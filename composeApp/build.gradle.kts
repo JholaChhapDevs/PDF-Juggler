@@ -31,6 +31,10 @@ kotlin {
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
+            
+            // MaryTTS dependencies
+            implementation("de.dfki.mary:marytts:5.2.1")
+            implementation("de.dfki.mary:voice-cmu-slt-hsmm:5.2.1")
         }
     }
 }
