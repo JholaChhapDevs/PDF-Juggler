@@ -299,6 +299,8 @@ fun PdfDisplayArea(
                     val pageSizePts = model.getPageSizePointsForDisplayIndex(model.selectedPageIndex)
                     val textDataForPage = model.allTextDataWithCoordinates[originalPageIndex] ?: emptyList()
 
+                    // In PdfDisplayArea.kt, update the PdfMid() call with these new parameters:
+
                     PdfMid(
                         modifier = Modifier
                             .weight(if (model.isFullscreen) {
@@ -345,9 +347,21 @@ fun PdfDisplayArea(
                         externalZoom = model.currentZoom,
                         onZoomIn = { model.zoomIn() },
                         onZoomOut = { model.zoomOut() },
-                        onResetZoom = { model.resetZoom() }
+                        onResetZoom = { model.resetZoom() },
+                        // NEW: Navigation parameters
+                        currentPageIndex = model.selectedPageIndex,
+                        totalPages = model.totalPages,
+                        onPreviousPage = {
+                            if (model.selectedPageIndex > 0) {
+                                model.selectPage(model.selectedPageIndex - 1)
+                            }
+                        },
+                        onNextPage = {
+                            if (model.selectedPageIndex < model.totalPages - 1) {
+                                model.selectPage(model.selectedPageIndex + 1)
+                            }
+                        }
                     )
-
                     // AI Chat panel (only show when enabled and not in fullscreen)
                     aiScreenModel?.let { screenModel ->
                         if (!model.isFullscreen) {

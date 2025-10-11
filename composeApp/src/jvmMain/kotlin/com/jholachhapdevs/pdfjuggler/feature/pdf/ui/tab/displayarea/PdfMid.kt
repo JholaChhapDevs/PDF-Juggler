@@ -5,6 +5,9 @@ import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.NextPlan
 import androidx.compose.material.icons.automirrored.filled.RotateLeft
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.Fullscreen
@@ -70,7 +73,11 @@ fun PdfMid(
     externalZoom: Float = 1f,
     onZoomIn: () -> Unit = {},
     onZoomOut: () -> Unit = {},
-    onResetZoom: () -> Unit = {}
+    onResetZoom: () -> Unit = {},
+    currentPageIndex: Int = 0,
+    totalPages: Int = 0,
+    onPreviousPage: () -> Unit = {},
+    onNextPage: () -> Unit = {}
 ) {
     val cs = MaterialTheme.colorScheme
     val clipboardManager = LocalClipboardManager.current
@@ -433,15 +440,12 @@ fun PdfMid(
                                 val canvasWidth = size.width
                                 val canvasHeight = size.height
 
-                                // Slightly rounder corners for a smoother band
                                 val corner = 6.dp.toPx()
 
-                                // Expand each highlight band more, with sensible minimum padding
                                 fun drawRoundedRectNorm(rect: Rect, color: androidx.compose.ui.graphics.Color) {
                                     val bandHeightPx = rect.height * canvasHeight
                                     val minVPad = 1.5.dp.toPx()
                                     val minHPad = 1.0.dp.toPx()
-                                    // ~22% vertical padding each side; ~10% horizontal padding each side
                                     val vPad = kotlin.math.max(bandHeightPx * 0.22f, minVPad)
                                     val hPad = kotlin.math.max(bandHeightPx * 0.10f, minHPad)
                                     val left = rect.left * canvasWidth - hPad
@@ -456,7 +460,6 @@ fun PdfMid(
                                     )
                                 }
 
-                                // First: draw search match highlight rectangles in cyan
                                 if (searchHighlightPositions.isNotEmpty()) {
                                     val posSet = searchHighlightPositions.toSet()
                                     val matchRects = textBoundsNormalized.filter { (_, tp) ->
@@ -471,7 +474,6 @@ fun PdfMid(
                                     }
                                 }
 
-                                // Persisted page highlights (different colors)
                                 if (pageHighlights.isNotEmpty()) {
                                     val rot = ((rotation % 360f) + 360f) % 360f
                                     val rotInt = when {
@@ -493,7 +495,6 @@ fun PdfMid(
                                     }
                                 }
 
-                                // Then: draw selected text highlight rectangles in yellow
                                 val toDraw = mergeRectsOnLines(selectedRectsNormalized)
                                 toDraw.forEach { nb ->
                                     drawRoundedRectNorm(
@@ -516,7 +517,6 @@ fun PdfMid(
                                                 when (event.type) {
                                                     PointerEventType.Press -> {
                                                         val position = event.changes.first().position
-                                                        // Right click -> open context menu if selection exists
                                                         if (event.buttons.isSecondaryPressed) {
                                                             if (selectedRectsNormalized.isNotEmpty()) {
                                                                 ctxMenuPos = position
@@ -525,7 +525,6 @@ fun PdfMid(
                                                                 continue
                                                             }
                                                         }
-                                                        // Left click -> begin selection
                                                         selectionStart = position
                                                         selectionEnd = position
                                                         isSelecting = true
@@ -628,14 +627,12 @@ fun PdfMid(
                                     }
                                 )
                                 HorizontalDivider()
-                                // New combined AI option
                                 DropdownMenuItem(
                                     text = { Text("Dictionary & Translate (AI)") },
                                     onClick = {
                                         val textSel = selectedText.trim()
                                         if (textSel.isNotEmpty()) {
                                             clipboardManager.setText(AnnotatedString(textSel))
-                                            // Use dictionary request to trigger the combined flow
                                             onDictionaryRequest(textSel)
                                         }
                                         ctxMenuOpen = false
@@ -675,7 +672,41 @@ fun PdfMid(
                 )
             }
 
-            // Only show floating toolbar in fullscreen mode or when showToolbar is true
+            // Bottom Navigation Bar (always visible)
+            if (totalPages > 0) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(12.dp)
+                        .background(cs.surface.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onPreviousPage,
+                        enabled = currentPageIndex > 0,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBackIos, "Previous Page", modifier = Modifier.size(20.dp))
+                    }
+
+                    JText(
+                        text = "${currentPageIndex + 1}/${totalPages}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurface
+                    )
+
+                    IconButton(
+                        onClick = onNextPage,
+                        enabled = currentPageIndex < totalPages - 1,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, "Next Page", modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+            // Top-right toolbar (only in fullscreen)
             if (showToolbar && isFullscreen) {
                 Row(
                     modifier = Modifier
