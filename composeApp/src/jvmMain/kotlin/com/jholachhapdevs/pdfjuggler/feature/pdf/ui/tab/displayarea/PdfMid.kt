@@ -68,6 +68,8 @@ fun PdfMid(
     // New: AI actions
     onDictionaryRequest: (text: String) -> Unit = {},
     onTranslateRequest: (text: String) -> Unit = {},
+    // TTS action
+    onSpeakRequest: (text: String) -> Unit = {},
 
     showToolbar: Boolean = true,
     externalZoom: Float = 1f,
@@ -627,6 +629,18 @@ fun PdfMid(
                                     }
                                 )
                                 HorizontalDivider()
+                                // TTS option
+                                DropdownMenuItem(
+                                    text = { Text("Speak") },
+                                    onClick = {
+                                        val textSel = selectedText.trim()
+                                        if (textSel.isNotEmpty()) {
+                                            onSpeakRequest(textSel)
+                                        }
+                                        ctxMenuOpen = false
+                                    }
+                                )
+                                // AI options
                                 DropdownMenuItem(
                                     text = { Text("Dictionary & Translate (AI)") },
                                     onClick = {

@@ -18,6 +18,7 @@ import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.PdfDisplayArea
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.PdfTab
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.TabScreenModel
+import com.jholachhapdevs.pdfjuggler.feature.tts.ui.TTSViewModel
 
 @Composable
 fun SplitViewComponent(
@@ -26,7 +27,8 @@ fun SplitViewComponent(
     availableTabs: List<Tab> = emptyList(),
     onLeftTabChange: (Tab?) -> Unit = {},
     onRightTabChange: (Tab?) -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    ttsViewModel: TTSViewModel? = null
 ) {
     var splitRatio by remember { mutableStateOf(0.5f) }
 
@@ -47,7 +49,7 @@ fun SplitViewComponent(
                             onTabSelected = onLeftTabChange
                         )
                     }
-                    PdfDisplayArea(model = leftModel)
+                    PdfDisplayArea(model = leftModel, ttsViewModel = ttsViewModel)
                 }
             } else {
                 EmptyPaneMessage("Select a document for the left pane")
@@ -80,7 +82,7 @@ fun SplitViewComponent(
                             onTabSelected = onRightTabChange
                         )
                     }
-                    PdfDisplayArea(model = rightModel)
+                    PdfDisplayArea(model = rightModel, ttsViewModel = ttsViewModel)
                 }
             } else {
                 EmptyPaneMessage("Select a document for the right pane")

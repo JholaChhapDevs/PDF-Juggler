@@ -186,6 +186,21 @@ class TabScreenModel(
         }
     }
 
+    /**
+     * Get text content for the currently displayed page
+     */
+    fun getCurrentPageText(): String {
+        val originalPageIndex = getOriginalPageIndex(selectedPageIndex)
+        return allTextData[originalPageIndex] ?: ""
+    }
+
+    /**
+     * Get all text from the document
+     */
+    fun getAllDocumentText(): String {
+        return allTextData.values.joinToString("\n\n")
+    }
+
     init {
         loadPdf()
     }
