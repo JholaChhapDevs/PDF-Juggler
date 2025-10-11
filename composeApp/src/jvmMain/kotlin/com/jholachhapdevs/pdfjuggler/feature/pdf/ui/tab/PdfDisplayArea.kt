@@ -27,32 +27,21 @@ import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfLeft
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfMid
 
 @Composable
-fun PdfSearchBar(model: TabScreenModel) {
+fun PdfSearchBar(
+    model: TabScreenModel,
+    isVisible: Boolean,
+    onDismiss: () -> Unit
+) {
     val cs = MaterialTheme.colorScheme
     var query by remember { mutableStateOf(model.searchQuery) }
-    var isSearchVisible by remember { mutableStateOf(false) }
-    
-    // Search toggle button (positioned to trigger the popup)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End
-    ) {
-        JButton(
-            onClick = { isSearchVisible = !isSearchVisible },
-            modifier = Modifier.padding(8.dp)
-        ) {
-            Text(if (isSearchVisible) "Hide Search" else "Search")
-        }
-    }
-    
-    // Search popup positioned on the right side
-    if (isSearchVisible) {
+
+    if (isVisible) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .onKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
-                        isSearchVisible = false
+                        onDismiss()
                         true
                     } else {
                         false
@@ -86,16 +75,16 @@ fun PdfSearchBar(model: TabScreenModel) {
                             fontWeight = FontWeight.Medium,
                             color = cs.onSurface
                         )
-                        
+
                         JButton(
-                            onClick = { isSearchVisible = false },
+                            onClick = onDismiss,
                             modifier = Modifier.size(32.dp),
                             contentPadding = PaddingValues(4.dp)
                         ) {
                             Text("✕")
                         }
                     }
-                    
+
                     // Search input field
                     OutlinedTextField(
                         value = query,
@@ -107,7 +96,7 @@ fun PdfSearchBar(model: TabScreenModel) {
                         label = { JText("Search text") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    
+
                     // Search results and controls
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -116,13 +105,13 @@ fun PdfSearchBar(model: TabScreenModel) {
                     ) {
                         val total = model.searchMatches.size
                         val current = if (model.currentSearchIndex >= 0) model.currentSearchIndex + 1 else 0
-                        
+
                         JText(
                             text = "$current of $total",
                             style = MaterialTheme.typography.bodySmall,
                             color = cs.onSurfaceVariant
                         )
-                        
+
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -132,7 +121,7 @@ fun PdfSearchBar(model: TabScreenModel) {
                             ) {
                                 Text("Previous")
                             }
-                            
+
                             JButton(
                                 onClick = { model.goToNextMatch() },
                                 enabled = total > 0
@@ -151,7 +140,9 @@ fun PdfSearchBar(model: TabScreenModel) {
 fun PdfDisplayArea(
     model: TabScreenModel,
     aiScreenModel: AiScreenModel? = null,
-    ttsViewModel: TTSViewModel? = null
+    ttsViewModel: TTSViewModel? = null,
+    isSearchVisible: Boolean = false,
+    onSearchVisibilityChange: (Boolean) -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     var showSaveAsDialog by remember { mutableStateOf(false) }
@@ -168,7 +159,7 @@ fun PdfDisplayArea(
     LaunchedEffect(model.selectedPageIndex) {
         aiScreenModel?.setSelectedPage(model.selectedPageIndex)
     }
-    
+
     if (model.isLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -183,7 +174,7 @@ fun PdfDisplayArea(
                 .onKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown && event.isCtrlPressed) {
                         when (event.key) {
-                            Key.F -> { /* Search shortcut handled by PdfSearchBar */; true }
+                            Key.F -> { onSearchVisibilityChange(!isSearchVisible); true }
                             else -> false
                         }
                     } else {
@@ -292,7 +283,7 @@ fun PdfDisplayArea(
                         }
                     }
                 }
-                
+
                 // Main content
                 Row(Modifier.fillMaxSize()) {
                     // Hide left pane when in fullscreen mode
@@ -315,22 +306,23 @@ fun PdfDisplayArea(
                             listState = listState
                         )
                     }
-                    
+
                     val originalPageIndex = model.getOriginalPageIndex(model.selectedPageIndex)
                     val pageSizePts = model.getPageSizePointsForDisplayIndex(model.selectedPageIndex)
                     val textDataForPage = model.allTextDataWithCoordinates[originalPageIndex] ?: emptyList()
-                    
+
+                    // In PdfDisplayArea.kt, update the PdfMid() call with these new parameters:
+
                     PdfMid(
                         modifier = Modifier
                             .weight(if (model.isFullscreen) {
                                 1f
                             } else if (aiScreenModel != null) {
-                                0.55f // Less space when AI chat is enabled
+                                0.55f
                             } else {
                                 0.85f
                             })
-                            .fillMaxSize()
-                            .padding(top = 24.dp), // add gap only above the PDF area
+                            .fillMaxSize(),
                         pageImage = model.currentPageImage,
                         textData = textDataForPage,
                         rotation = model.currentRotation,
@@ -369,9 +361,26 @@ fun PdfDisplayArea(
                                 tts.setTextToSpeak(text)
                                 tts.play()
                             }
+                        },
+                        showToolbar = false,
+                        externalZoom = model.currentZoom,
+                        onZoomIn = { model.zoomIn() },
+                        onZoomOut = { model.zoomOut() },
+                        onResetZoom = { model.resetZoom() },
+                        // NEW: Navigation parameters
+                        currentPageIndex = model.selectedPageIndex,
+                        totalPages = model.totalPages,
+                        onPreviousPage = {
+                            if (model.selectedPageIndex > 0) {
+                                model.selectPage(model.selectedPageIndex - 1)
+                            }
+                        },
+                        onNextPage = {
+                            if (model.selectedPageIndex < model.totalPages - 1) {
+                                model.selectPage(model.selectedPageIndex + 1)
+                            }
                         }
                     )
-                    
                     // AI Chat panel (only show when enabled and not in fullscreen)
                     aiScreenModel?.let { screenModel ->
                         if (!model.isFullscreen) {
@@ -387,9 +396,13 @@ fun PdfDisplayArea(
                     }
                 }
             }
-            
+
             // Search popup overlay (positioned on top-right)
-            PdfSearchBar(model)
+            PdfSearchBar(
+                model = model,
+                isVisible = isSearchVisible,
+                onDismiss = { onSearchVisibilityChange(false) }
+            )
             
             // Floating TTS close button (when TTS is active)
             ttsViewModel?.let { tts ->
@@ -404,7 +417,7 @@ fun PdfDisplayArea(
             }
         }
     }
-    
+
     // Save dialogs
     SaveDialog(
         isOpen = showSaveAsDialog,
