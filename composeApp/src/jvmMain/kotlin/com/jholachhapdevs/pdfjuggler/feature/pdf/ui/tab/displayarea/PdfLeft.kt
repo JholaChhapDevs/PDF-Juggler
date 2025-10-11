@@ -10,22 +10,27 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.offset
+import androidx.compose.ui.unit.sp
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TableOfContentData
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.BookmarkData
@@ -58,56 +63,113 @@ fun PdfLeft(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Icon-based tab row
-            TabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = cs.surfaceVariant.copy(alpha = 0.5f)
+            Surface(
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Filled.Photo,
-                            contentDescription = "Thumbnails",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Filled.TableRows,
-                            contentDescription = "Contents",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                )
-                Tab(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    icon = {
-                        Box {
-                            Icon(
-                                imageVector = if (bookmarks.isNotEmpty()) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                                contentDescription = "Bookmarks",
-                                modifier = Modifier.size(20.dp)
+                TabRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    selectedTabIndex = selectedTab,
+                    containerColor = Color.Transparent,
+                    indicator = { tabPositions ->
+                        if (selectedTab < tabPositions.size) {
+                            TabRowDefaults.SecondaryIndicator(
+                                modifier = Modifier
+                                    .tabIndicatorOffset(tabPositions[selectedTab])
+                                    .padding(horizontal = 16.dp)
+                                    .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)),
+                                height = 3.dp,
+                                color = MaterialTheme.colorScheme.primary
                             )
-                            if (bookmarks.isNotEmpty()) {
-                                Badge(
-                                    containerColor = if (hasUnsavedBookmarks) cs.error else cs.primary,
-                                    modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp)
-                                ) {
-                                    JText(
-                                        text = "${bookmarks.size}",
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
+                        }
+                    },
+                    divider = {}
+                ) {
+                    // Thumbnails Tab
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Filled.Photo,
+                                contentDescription = "Thumbnails",
+                                modifier = Modifier.size(24.dp),
+                                tint = if (selectedTab == 0)
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            )
+                        },
+                        modifier = Modifier
+                            .background(Color.Transparent)
+                            .padding(vertical = 8.dp)
+                            .width(40.dp)
+                    )
+
+                    // Table of Contents Tab
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Filled.TableRows,
+                                contentDescription = "Contents",
+                                modifier = Modifier.size(24.dp),
+                                tint = if (selectedTab == 1)
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            )
+                        },
+                        modifier = Modifier
+                            .background(Color.Transparent)
+                            .padding(vertical = 8.dp)
+                            .width(40.dp)
+                    )
+
+                    // Bookmarks Tab
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        icon = {
+                            Box {
+                                Icon(
+                                    imageVector = if (bookmarks.isNotEmpty()) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                    contentDescription = "Bookmarks",
+                                    modifier = Modifier.size(24.dp),
+                                    tint = if (selectedTab == 2)
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                )
+                                if (bookmarks.isNotEmpty()) {
+                                    Badge(
+                                        containerColor = if (hasUnsavedBookmarks) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = 6.dp, y = (-6).dp)
+                                    ) {
+                                        Text(
+                                            text = if (bookmarks.size > 99) "99+" else "${bookmarks.size}",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+                                    }
                                 }
                             }
-                        }
-                    }
-                )
+                        },
+                        modifier = Modifier
+                            .background(Color.Transparent)
+                            .padding(vertical = 8.dp)
+                            .width(40.dp)
+                    )
+                }
             }
 
             when (selectedTab) {
