@@ -5,6 +5,7 @@ import androidx.compose.runtime.remember
 import cafe.adriel.voyager.navigator.tab.Tab
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.PdfFile
+import com.jholachhapdevs.pdfjuggler.feature.tts.rememberTTSViewModel
 import java.util.concurrent.atomic.AtomicInteger
 
 class PdfTab(
@@ -26,7 +27,14 @@ class PdfTab(
     override fun Content() {
         // Get the cached model once per file path
         val model = remember(pdfFile.path) { modelProvider(pdfFile) }
-        PdfDisplayArea(model)
+        
+        // Create TTS view model for this tab
+        val ttsViewModel = rememberTTSViewModel()
+        
+        PdfDisplayArea(
+            model = model, 
+            ttsViewModel = ttsViewModel
+        )
     }
 
     companion object {

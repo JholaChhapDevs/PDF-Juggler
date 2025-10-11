@@ -1,6 +1,5 @@
 package com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -16,13 +15,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import cafe.adriel.voyager.core.model.rememberScreenModel
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JButton
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
-import com.jholachhapdevs.pdfjuggler.feature.ai.data.remote.GeminiRemoteDataSource
-import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.SendPromptUseCase
 import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiChatComponent
 import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiScreenModel
+import com.jholachhapdevs.pdfjuggler.feature.tts.ui.TTSViewModel
+import com.jholachhapdevs.pdfjuggler.feature.tts.ui.TTSFloatingCloseButton
+import com.jholachhapdevs.pdfjuggler.feature.tts.ui.TTSProgressBar
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.component.SaveDialog
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfLeft
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.displayarea.PdfMid
@@ -151,7 +150,8 @@ fun PdfSearchBar(model: TabScreenModel) {
 @Composable
 fun PdfDisplayArea(
     model: TabScreenModel,
-    aiScreenModel: AiScreenModel? = null
+    aiScreenModel: AiScreenModel? = null,
+    ttsViewModel: TTSViewModel? = null
 ) {
     val listState = rememberLazyListState()
     var showSaveAsDialog by remember { mutableStateOf(false) }
@@ -193,6 +193,16 @@ fun PdfDisplayArea(
                 .focusable()
         ) {
             Column(Modifier.fillMaxSize()) {
+                // TTS simple progress bar (when TTS is active)
+                ttsViewModel?.let { tts ->
+                    TTSProgressBar(
+                        isActive = tts.isPlaying,
+                        currentWords = tts.currentWords,
+                        currentWordIndex = tts.currentWordIndex,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                
                 // Unified Save Controls Bar (shown when any changes exist)
                 val hasAnyUnsaved = model.hasPageChanges || model.hasUnsavedBookmarks || model.hasUnsavedHighlights
                 if (hasAnyUnsaved) {
@@ -326,7 +336,8 @@ fun PdfDisplayArea(
                         rotation = model.currentRotation,
                         isFullscreen = model.isFullscreen,
                         onTextSelected = { selectedText ->
-                            // Handle selected text (no logging)
+                            // Handle selected text for TTS
+                            ttsViewModel?.setTextToSpeak(selectedText)
                         },
                         onViewportChanged = { viewport ->
                             model.onViewportChanged(viewport)
@@ -352,7 +363,13 @@ fun PdfDisplayArea(
                             }
                         },
                         onDictionaryRequest = { text -> model.requestAiDictionary(text) },
-                        onTranslateRequest = { text -> model.requestAiTranslate(text) }
+                        onTranslateRequest = { text -> model.requestAiTranslate(text) },
+                        onSpeakRequest = { text -> 
+                            ttsViewModel?.let { tts ->
+                                tts.setTextToSpeak(text)
+                                tts.play()
+                            }
+                        }
                     )
                     
                     // AI Chat panel (only show when enabled and not in fullscreen)
@@ -373,6 +390,18 @@ fun PdfDisplayArea(
             
             // Search popup overlay (positioned on top-right)
             PdfSearchBar(model)
+            
+            // Floating TTS close button (when TTS is active)
+            ttsViewModel?.let { tts ->
+                if (tts.isPlaying) {
+                    TTSFloatingCloseButton(
+                        onClose = { tts.stop() },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp)
+                    )
+                }
+            }
         }
     }
     

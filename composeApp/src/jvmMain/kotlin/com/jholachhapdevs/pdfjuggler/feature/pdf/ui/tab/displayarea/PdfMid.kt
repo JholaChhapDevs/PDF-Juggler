@@ -68,7 +68,9 @@ fun PdfMid(
     onAddHighlight: (rectsNormalized: List<Rect>, colorArgb: Long) -> Unit = { _, _ -> },
     // New: AI actions
     onDictionaryRequest: (text: String) -> Unit = {},
-    onTranslateRequest: (text: String) -> Unit = {}
+    onTranslateRequest: (text: String) -> Unit = {},
+    // TTS action
+    onSpeakRequest: (text: String) -> Unit = {}
 ) {
     val cs = MaterialTheme.colorScheme
     val clipboardManager = LocalClipboardManager.current
@@ -647,7 +649,18 @@ fun PdfMid(
                                     }
                                 )
                                 HorizontalDivider()
-                                // New combined AI option
+                                // TTS option
+                                DropdownMenuItem(
+                                    text = { Text("Speak") },
+                                    onClick = {
+                                        val textSel = selectedText.trim()
+                                        if (textSel.isNotEmpty()) {
+                                            onSpeakRequest(textSel)
+                                        }
+                                        ctxMenuOpen = false
+                                    }
+                                )
+                                // AI options
                                 DropdownMenuItem(
                                     text = { Text("Dictionary & Translate (AI)") },
                                     onClick = {

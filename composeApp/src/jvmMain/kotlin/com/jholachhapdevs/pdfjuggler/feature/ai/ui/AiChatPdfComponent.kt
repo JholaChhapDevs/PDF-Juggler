@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.PdfDisplayArea
 import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.TabScreenModel
+import com.jholachhapdevs.pdfjuggler.feature.tts.rememberTTSViewModel
 
 @Composable
 fun AiChatPdfComponent(
@@ -28,6 +29,9 @@ fun AiChatPdfComponent(
         }
     }
 
+    // Create TTS view model for this component
+    val ttsViewModel = rememberTTSViewModel()
+    
     Row(
         modifier = modifier.fillMaxSize()
     ) {
@@ -35,7 +39,11 @@ fun AiChatPdfComponent(
         Box(
             modifier = Modifier.weight(0.7f)
         ) {
-            PdfDisplayArea(model = tabScreenModel)
+            PdfDisplayArea(
+                model = tabScreenModel,
+                aiScreenModel = aiScreenModel,
+                ttsViewModel = ttsViewModel
+            )
         }
 
         // AI chat on the right (30% width)
