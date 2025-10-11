@@ -73,6 +73,10 @@ class TabScreenModel(
         
     var tableOfContent by mutableStateOf<List<TableOfContentData>>(emptyList())
         private set
+        
+    // TOC loading state
+    var isTocLoading by mutableStateOf(false)
+        private set
 
     // Map of page index -> page size in PDF points (mediaBox width/height)
     var pageSizesPoints by mutableStateOf<Map<Int, Size>>(emptyMap())
@@ -140,7 +144,6 @@ class TabScreenModel(
                 // Load text data
                 allTextDataWithCoordinates = extractAllTextData(pdfFile.path)
                 allTextData = getTextOnlyData()
-                tableOfContent = getTableOfContents(pdfFile.path)
                 
                 // Load bookmarks from PDF metadata
                 val loadedBookmarks = bookmarkManager.loadBookmarksFromMetadata()
@@ -155,11 +158,46 @@ class TabScreenModel(
                 } else {
                     searchManager.clearSearch()
                 }
+                
+                // Start async TOC loading after PDF is loaded and displayed
+                loadTableOfContentsAsync()
 
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {
                 isLoading = false
+            }
+        }
+    }
+    
+    /**
+     * Load table of contents asynchronously in a separate coroutine
+     * This prevents blocking the main PDF loading process
+     */
+    private fun loadTableOfContentsAsync() {
+        screenModelScope.launch(Dispatchers.IO) {
+            try {
+                isTocLoading = true
+                println("Starting asynchronous table of contents loading...")
+                
+                val toc = getTableOfContents(pdfFile.path)
+                
+                // Update the UI on the main thread
+                withContext(Dispatchers.Main) {
+                    tableOfContent = toc
+                    isTocLoading = false
+                    println("Table of contents loaded successfully with ${toc.size} items")
+                }
+                
+            } catch (e: Exception) {
+                println("Error loading table of contents asynchronously: ${e.message}")
+                e.printStackTrace()
+                
+                // Set fallback TOC on error
+                withContext(Dispatchers.Main) {
+                    tableOfContent = createFallbackTableOfContents(totalPages)
+                    isTocLoading = false
+                }
             }
         }
     }
@@ -432,16 +470,49 @@ class TabScreenModel(
      * This can be called by the UI to force regeneration
      */
     fun regenerateTableOfContentsWithAI() {
-        screenModelScope.launch {
+        screenModelScope.launch(Dispatchers.IO) {
             try {
+                // Update loading state on main thread
+                withContext(Dispatchers.Main) {
+                    isTocLoading = true
+                }
+                
                 println("Manually regenerating table of contents with Gemini API...")
                 val newToc = generateTableOfContentsWithGemini(pdfFile.path, totalPages)
-                tableOfContent = newToc
-                println("Table of contents regenerated successfully with ${newToc.size} items")
+                
+                // Update TOC and loading state on main thread
+                withContext(Dispatchers.Main) {
+                    tableOfContent = newToc
+                    isTocLoading = false
+                    println("Table of contents regenerated successfully with ${newToc.size} items")
+                }
+                
             } catch (e: Exception) {
                 println("Error regenerating table of contents: ${e.message}")
                 e.printStackTrace()
+                
+                // Update loading state and set fallback on error
+                withContext(Dispatchers.Main) {
+                    tableOfContent = createFallbackTableOfContents(totalPages)
+                    isTocLoading = false
+                }
             }
+        }
+    }
+    
+    /**
+     * Check if table of contents is currently being loaded
+     */
+    fun isTocCurrentlyLoading(): Boolean = isTocLoading
+    
+    /**
+     * Cancel ongoing TOC loading (sets to fallback immediately)
+     */
+    fun cancelTocLoading() {
+        if (isTocLoading) {
+            println("Cancelling TOC loading and using fallback")
+            tableOfContent = createFallbackTableOfContents(totalPages)
+            isTocLoading = false
         }
     }
 
@@ -479,26 +550,44 @@ class TabScreenModel(
         }
     }
 
-    private suspend fun getTableOfContents(filePath: String): List<TableOfContentData> = withContext(Dispatchers.IO) {
-        PDDocument.load(File(filePath)).use { document ->
-            val outline: PDDocumentOutline? = document.documentCatalog.documentOutline
+    private suspend fun getTableOfContents(filePath: String): List<TableOfContentData> {
+        // First, quickly check if PDF has metadata TOC without loading full document
+        val metadataToc = checkMetadataTableOfContents(filePath)
+        if (metadataToc.isNotEmpty()) {
+            println("Using table of contents from PDF metadata (${metadataToc.size} items)")
+            return metadataToc
+        }
+        
+        // If no metadata TOC found, generate one using Gemini API
+        println("No table of contents found in PDF metadata, generating using Gemini API...")
+        return generateTableOfContentsWithGemini(filePath, totalPages)
+    }
+    
+    /**
+     * Quickly check for metadata table of contents without blocking
+     */
+    private suspend fun checkMetadataTableOfContents(filePath: String): List<TableOfContentData> = withContext(Dispatchers.IO) {
+        try {
+            PDDocument.load(File(filePath)).use { document ->
+                val outline: PDDocumentOutline? = document.documentCatalog.documentOutline
 
-            // Check if PDF has metadata table of contents
-            if (outline != null) {
-                val metadataToc = outline.children().mapNotNull {
-                    if (it is PDOutlineItem) processOutlineItem(it, document) else null
+                // Check if PDF has metadata table of contents
+                if (outline != null) {
+                    val metadataToc = outline.children().mapNotNull {
+                        if (it is PDOutlineItem) processOutlineItem(it, document) else null
+                    }
+                    
+                    // Return metadata TOC if found
+                    if (metadataToc.isNotEmpty()) {
+                        return@withContext metadataToc
+                    }
                 }
                 
-                // If we found a valid TOC in metadata, use it
-                if (metadataToc.isNotEmpty()) {
-                    println("Using table of contents from PDF metadata")
-                    return@withContext metadataToc
-                }
+                return@withContext emptyList()
             }
-            
-            // If no metadata TOC found, generate one using Gemini API
-            println("No table of contents found in PDF metadata, generating using Gemini API...")
-            return@withContext generateTableOfContentsWithGemini(filePath, document.numberOfPages)
+        } catch (e: Exception) {
+            println("Error checking metadata TOC: ${e.message}")
+            return@withContext emptyList()
         }
     }
     

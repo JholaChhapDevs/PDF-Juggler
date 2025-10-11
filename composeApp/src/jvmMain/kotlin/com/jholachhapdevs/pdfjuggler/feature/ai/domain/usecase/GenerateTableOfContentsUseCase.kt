@@ -5,6 +5,7 @@ import com.jholachhapdevs.pdfjuggler.feature.ai.data.remote.GeminiRemoteDataSour
 import com.jholachhapdevs.pdfjuggler.feature.ai.domain.model.AttachedFile
 import com.jholachhapdevs.pdfjuggler.feature.ai.domain.model.ChatMessage
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TableOfContentData
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 
@@ -39,46 +40,51 @@ class GenerateTableOfContentsUseCase(
         fileName: String,
         totalPages: Int
     ): List<TableOfContentData> {
-        try {
-            // Upload PDF to Gemini
-            val fileUri = uploadFileUseCase(
-                fileName = fileName,
-                mimeType = "application/pdf",
-                bytes = pdfBytes
-            )
+        return try {
+            // Set a timeout to prevent hanging (30 seconds)
+            withTimeout(30_000L) {
+                println("Starting TOC generation with timeout of 30 seconds...")
+                
+                // Upload PDF to Gemini
+                val fileUri = uploadFileUseCase(
+                    fileName = fileName,
+                    mimeType = "application/pdf",
+                    bytes = pdfBytes
+                )
 
-            // Create the prompt for table of contents generation
-            val prompt = createTableOfContentsPrompt(totalPages)
+                // Create the prompt for table of contents generation
+                val prompt = createTableOfContentsPrompt(totalPages)
 
-            // Create chat message with attached PDF file
-            val message = ChatMessage(
-                role = "user",
-                text = prompt,
-                files = listOf(
-                    AttachedFile(
-                        mimeType = "application/pdf",
-                        fileUri = fileUri
+                // Create chat message with attached PDF file
+                val message = ChatMessage(
+                    role = "user",
+                    text = prompt,
+                    files = listOf(
+                        AttachedFile(
+                            mimeType = "application/pdf",
+                            fileUri = fileUri
+                        )
                     )
                 )
-            )
 
-            // Send to Gemini
-            val response = remote.sendChat(modelName, listOf(message))
+                // Send to Gemini
+                val response = remote.sendChat(modelName, listOf(message))
 
-            // Parse the response
-            val responseText = response.candidates
-                ?.firstOrNull()
-                ?.content
-                ?.parts
-                ?.firstOrNull()
-                ?.text ?: throw Exception("No response from Gemini")
+                // Parse the response
+                val responseText = response.candidates
+                    ?.firstOrNull()
+                    ?.content
+                    ?.parts
+                    ?.firstOrNull()
+                    ?.text ?: throw Exception("No response from Gemini")
 
-            return parseGeminiResponse(responseText)
-
+                parseGeminiResponse(responseText)
+            }
+            
         } catch (e: Exception) {
             println("Error generating table of contents with Gemini: ${e.message}")
             e.printStackTrace()
-            return emptyList()
+            emptyList()
         }
     }
 
