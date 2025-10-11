@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.jholachhapdevs.pdfjuggler.feature.tts.rememberTTSViewModel
 
 @Composable
 fun PdfTabComponent(
@@ -46,6 +47,9 @@ fun PdfTabComponent(
     var isSearchVisible by remember { mutableStateOf(false) }
 
     val pdfGenerationService = remember { PdfGenerationService() }
+
+    // Create a single TTS ViewModel scoped to this component
+    val ttsViewModel = rememberTTSViewModel()
 
     // If no tabs, exit to the previous screen
     if (model.tabs.isEmpty()) {
@@ -171,7 +175,8 @@ fun PdfTabComponent(
                         rightModel = model.getTabModel(model.splitViewRightTab),
                         availableTabs = model.tabs,
                         onLeftTabChange = { tab -> model.setSplitViewLeft(tab) },
-                        onRightTabChange = { tab -> model.setSplitViewRight(tab) }
+                        onRightTabChange = { tab -> model.setSplitViewRight(tab) },
+                        ttsViewModel = ttsViewModel
                     )
                 } else if (model.isAiChatEnabled) {
                     // AI chat mode - show PDF with AI chat panel
@@ -190,6 +195,7 @@ fun PdfTabComponent(
                         PdfDisplayArea(
                             model = currentTabModel,
                             aiScreenModel = aiScreenModel,
+                            ttsViewModel = ttsViewModel,
                             isSearchVisible = isSearchVisible,
                             onSearchVisibilityChange = { isSearchVisible = it }
                         )
@@ -202,6 +208,7 @@ fun PdfTabComponent(
                         PdfDisplayArea(
                             model = currentTabModel,
                             aiScreenModel = null,
+                            ttsViewModel = ttsViewModel,
                             isSearchVisible = isSearchVisible,
                             onSearchVisibilityChange = { isSearchVisible = it }
                         )
@@ -259,8 +266,8 @@ fun PdfTabComponent(
                     // Only allow dismissal if not actively processing
                     if (progressMessage.contains("Error") ||
                         progressMessage.contains("success") ||
-                        progressMessage.contains("cancelled") ||
-                        progressMessage.contains("completed")) {
+                        progressMessage.contains("completed")
+                    ) {
                         showProgressDialog = false
                     }
                 }

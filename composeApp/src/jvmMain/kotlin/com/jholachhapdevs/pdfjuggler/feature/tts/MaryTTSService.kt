@@ -347,9 +347,9 @@ class MaryTTSService : TTSService, WordTrackingTTS {
             val audioStart = System.currentTimeMillis()
 
             try {
-                while (audioInputStream.read(buffer).also { bytesRead = it } != -1 && 
+                while (audioInputStream.read(buffer).also { bytesRead = it } != -1 &&
                        isSpeaking.get() && _state.value == TTSState.SPEAKING) {
-                    
+
                     // Write audio data immediately to the line
                     var offset = 0
                     while (offset < bytesRead) {
@@ -357,7 +357,7 @@ class MaryTTSService : TTSService, WordTrackingTTS {
                         offset += written
                         totalBytesWritten += written
                     }
-                    
+
                     // Log progress occasionally
                     if (totalBytesWritten % 32768 == 0) {
                         val elapsed = System.currentTimeMillis() - audioStart
@@ -374,7 +374,7 @@ class MaryTTSService : TTSService, WordTrackingTTS {
 
             val totalTime = System.currentTimeMillis() - playbackStart
             println("DEBUG: Streaming playback completed in ${totalTime}ms, total bytes: $totalBytesWritten")
-            
+
         } catch (e: Exception) {
             println("DEBUG: Exception in playAudioStreaming: ${e.message}")
             e.printStackTrace()
@@ -404,7 +404,7 @@ class MaryTTSService : TTSService, WordTrackingTTS {
 
         val audioBytes = outputStream.toByteArray()
         println("DEBUG: Read ${audioBytes.size} bytes for fallback playback")
-        
+
         if (audioBytes.isNotEmpty()) {
             currentAudioData = audioBytes
             playAudio(audioBytes, audioFormat)
@@ -505,7 +505,7 @@ class MaryTTSService : TTSService, WordTrackingTTS {
                 var lastFramePosition = clip.framePosition
                 var stuckCounter = 0
                 val maxStuckTime = 20 // 1 second (20 * 50ms)
-                
+
                 while (clip.framePosition < clip.frameLength && isSpeaking.get() && _state.value == TTSState.SPEAKING) {
                     delay(50)
                     
