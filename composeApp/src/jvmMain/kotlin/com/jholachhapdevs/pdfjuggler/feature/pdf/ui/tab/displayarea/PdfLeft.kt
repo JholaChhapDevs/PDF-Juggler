@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
@@ -22,14 +20,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.sp
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JText
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.TableOfContentData
@@ -43,13 +39,10 @@ fun PdfLeft(
     bookmarks: List<BookmarkData> = emptyList(),
     selectedIndex: Int = 0,
     onThumbnailClick: (Int) -> Unit = {},
-    onMovePageUp: (Int) -> Unit = {},
-    onMovePageDown: (Int) -> Unit = {},
     onAddBookmark: (BookmarkData) -> Unit = {},
     onRemoveBookmark: (Int) -> Unit = {},
     onRemoveBookmarkForPage: (Int) -> Unit = {},
     onSaveBookmarksToMetadata: () -> Unit = {},
-    hasPageChanges: Boolean = false,
     hasUnsavedBookmarks: Boolean = false,
     listState: LazyListState
 ) {
@@ -175,7 +168,7 @@ fun PdfLeft(
             when (selectedTab) {
                 0 -> ThumbnailView(
                     thumbnails, selectedIndex, onThumbnailClick,
-                    onMovePageUp, onMovePageDown, hasPageChanges, listState,
+                    listState,
                     bookmarks, onAddBookmark, onRemoveBookmarkForPage
                 )
                 1 -> TableOfContentsView(tableOfContents, onThumbnailClick)
@@ -194,9 +187,6 @@ private fun ThumbnailView(
     thumbnails: List<ImageBitmap>,
     selectedIndex: Int,
     onThumbnailClick: (Int) -> Unit,
-    onMovePageUp: (Int) -> Unit,
-    onMovePageDown: (Int) -> Unit,
-    hasPageChanges: Boolean,
     listState: LazyListState,
     bookmarks: List<BookmarkData>,
     onAddBookmark: (BookmarkData) -> Unit,
@@ -205,26 +195,6 @@ private fun ThumbnailView(
     val cs = MaterialTheme.colorScheme
 
     Column(modifier = Modifier.fillMaxSize()) {
-        if (hasPageChanges) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        color = cs.primaryContainer.copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp)
-                    )
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                JText(
-                    text = "Pages Reordered",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = cs.primary
-                )
-            }
-        }
-
         LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -254,32 +224,6 @@ private fun ThumbnailView(
                                     .padding(bottom = 4.dp),
                                 horizontalArrangement = Arrangement.SpaceEvenly
                             ) {
-                                IconButton(
-                                    onClick = { onMovePageUp(index) },
-                                    enabled = index > 0,
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.KeyboardArrowUp,
-                                        contentDescription = "Move page up",
-                                        tint = if (index > 0) cs.primary else cs.onSurface.copy(alpha = 0.3f),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-
-                                IconButton(
-                                    onClick = { onMovePageDown(index) },
-                                    enabled = index < thumbnails.size - 1,
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.KeyboardArrowDown,
-                                        contentDescription = "Move down",
-                                        tint = if (index < thumbnails.size - 1) cs.primary else cs.onSurface.copy(alpha = 0.3f),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-
                                 IconButton(
                                     onClick = {
                                         if (isBookmarked) {
@@ -377,7 +321,7 @@ private fun TableOfContentsView(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(
-                    imageVector = Icons.Filled.MenuBook,
+                    imageVector = Icons.Filled.Menu,
                     contentDescription = null,
                     modifier = Modifier.size(48.dp),
                     tint = cs.onSurface.copy(alpha = 0.3f)
@@ -462,7 +406,7 @@ private fun BookmarksView(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(Modifier.width(8.dp))
-                JText("Save Bookmarks", fontWeight = FontWeight.Medium)
+                Text("Save Bookmarks", fontWeight = FontWeight.Medium)
             }
         }
 

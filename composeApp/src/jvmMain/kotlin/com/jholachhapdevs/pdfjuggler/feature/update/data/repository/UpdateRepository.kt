@@ -9,7 +9,7 @@ import io.ktor.http.HttpStatusCode
 class UpdateRepository {
     suspend fun getUpdateData(): UpdateInfoDto? { // '?' means it can return null, in kotlin by default everything is non-null, here its explicitly mentioned that it can return null which we need to take care of while calling this function.
         return try {
-            val url = "https://kanha321.github.io/Upastithi/update.json"
+            val url = "https://kanha321.github.io/pages/pdf-juggler/update.json"
             val result = httpClient.get(url)
             if (result.status == HttpStatusCode.OK) {
                 result.body()  // equivalent to return result.body<UpdateInfoDto>()

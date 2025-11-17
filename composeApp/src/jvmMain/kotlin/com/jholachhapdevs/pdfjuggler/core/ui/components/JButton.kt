@@ -22,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.jholachhapdevs.pdfjuggler.core.ui.extendedColors
@@ -69,7 +71,7 @@ fun JButton(
             this.radius = radiusPx
             this.spread = 0f
             this.color = glowColor.copy(alpha = 0.7f * glowAlpha)
-        }
+        }.pointerHoverIcon(PointerIcon.Hand)
     } else {
         Modifier
     }
@@ -93,7 +95,6 @@ fun JButton(
         )
     }
 }
-
 
 
 object JugglerButtonDefaults {

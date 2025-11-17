@@ -3,19 +3,18 @@ package com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.ImageBitmap
 
 /**
- * Manages page operations for the PDF viewer
+ * PageManager: reordering removed. This manager now maintains a stable identity page order
+ * and exposes selection helpers. All reordering APIs are intentionally no-ops to remove
+ * the page reordering feature while keeping the rest of the UI/API stable.
  */
-class PageManager(
-    private val onThumbnailsUpdate: suspend () -> Unit
-) {
+class PageManager {
     // Page ordering - maps display order to original page indices
     var pageOrder by mutableStateOf<List<Int>>(emptyList())
         private set
     
-    // Track if pages have been reordered
+    // Track if pages have been reordered (feature removed -> always false)
     var hasPageChanges by mutableStateOf(false)
         private set
 
@@ -51,97 +50,37 @@ class PageManager(
     }
 
     /**
-     * Move a page up in the order (decrease display position)
+     * Move a page up in the order (no-op since reordering is removed)
      */
-    suspend fun movePageUp(displayIndex: Int) {
-        if (displayIndex > 0 && displayIndex < pageOrder.size) {
-            val newOrder = pageOrder.toMutableList()
-            // Swap with previous item
-            val temp = newOrder[displayIndex]
-            newOrder[displayIndex] = newOrder[displayIndex - 1]
-            newOrder[displayIndex - 1] = temp
-            
-            pageOrder = newOrder
-            hasPageChanges = true
-            
-            // Update thumbnails to reflect new order
-            onThumbnailsUpdate()
-            
-            // If the selected page was moved, update the selection
-            if (selectedPageIndex == displayIndex) {
-                selectedPageIndex = displayIndex - 1
-            } else if (selectedPageIndex == displayIndex - 1) {
-                selectedPageIndex = displayIndex
-            }
-        }
+    fun movePageUp(displayIndex: Int) {
+        // Reordering disabled: do nothing and keep state unchanged
     }
     
     /**
-     * Move a page down in the order (increase display position)
+     * Move a page down in the order (no-op since reordering is removed)
      */
-    suspend fun movePageDown(displayIndex: Int) {
-        if (displayIndex >= 0 && displayIndex < pageOrder.size - 1) {
-            val newOrder = pageOrder.toMutableList()
-            // Swap with next item
-            val temp = newOrder[displayIndex]
-            newOrder[displayIndex] = newOrder[displayIndex + 1]
-            newOrder[displayIndex + 1] = temp
-            
-            pageOrder = newOrder
-            hasPageChanges = true
-            
-            // Update thumbnails to reflect new order
-            onThumbnailsUpdate()
-            
-            // If the selected page was moved, update the selection
-            if (selectedPageIndex == displayIndex) {
-                selectedPageIndex = displayIndex + 1
-            } else if (selectedPageIndex == displayIndex + 1) {
-                selectedPageIndex = displayIndex
-            }
-        }
+    fun movePageDown(displayIndex: Int) {
+        // Reordering disabled: do nothing
     }
     
     /**
-     * Move a page to a specific position in the order
+     * Move a page to a specific position in the order (no-op)
      */
-    suspend fun movePageToPosition(fromIndex: Int, toIndex: Int) {
-        if (fromIndex == toIndex || fromIndex < 0 || toIndex < 0 || 
-            fromIndex >= pageOrder.size || toIndex >= pageOrder.size) {
-            return
-        }
-        
-        val newOrder = pageOrder.toMutableList()
-        val pageToMove = newOrder.removeAt(fromIndex)
-        newOrder.add(toIndex, pageToMove)
-        
-        pageOrder = newOrder
-        hasPageChanges = true
-        
-        // Update thumbnails to reflect new order
-        onThumbnailsUpdate()
-        
-        // Update selected page index if necessary
-        when {
-            selectedPageIndex == fromIndex -> selectedPageIndex = toIndex
-            selectedPageIndex in (minOf(fromIndex, toIndex) + 1)..maxOf(fromIndex, toIndex) -> {
-                if (fromIndex < toIndex) selectedPageIndex-- else selectedPageIndex++
-            }
-        }
+    fun movePageToPosition(fromIndex: Int, toIndex: Int) {
+        // Reordering disabled: ignore
     }
     
     /**
      * Reset page order to original sequence
      */
-    suspend fun resetPageOrder(totalPages: Int) {
+    fun resetPageOrder(totalPages: Int) {
+        // Already identity - reinitialize to be safe
         pageOrder = (0 until totalPages).toList()
         hasPageChanges = false
-        onThumbnailsUpdate()
-        // Keep current selected index (it will now refer to a different original page)
     }
 
     /**
-     * Mark page changes as saved
+     * Mark page changes as saved (no-op)
      */
     fun markPageChangesSaved() {
         hasPageChanges = false

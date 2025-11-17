@@ -15,11 +15,17 @@ import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup
  * Manages highlight operations for the PDF viewer
  */
 class HighlightManager {
+    // Baseline snapshot for revert
+    private var baselineHighlightsByPage: Map<Int, List<HighlightMark>> = emptyMap()
     
     // Highlights state: original page index -> list of marks (rects normalized to unrotated page)
     var highlightsByPage by mutableStateOf<Map<Int, List<HighlightMark>>>(emptyMap())
         private set
         
+    // Per-page undo/redo stacks (store removed/redo-able marks)
+    private var undoStacksByPage: Map<Int, List<HighlightMark>> = emptyMap()
+    private var redoStacksByPage: Map<Int, List<HighlightMark>> = emptyMap()
+
     var hasUnsavedHighlights by mutableStateOf(false)
         private set
 
@@ -55,6 +61,13 @@ class HighlightManager {
         list.add(HighlightMark(unrotatedRects, colorArgb))
         highlightsByPage = highlightsByPage.toMutableMap().apply { 
             put(originalPageIndex, list) 
+        }
+        // New action invalidates redo stack; also push to undo stack
+        redoStacksByPage = redoStacksByPage.toMutableMap().apply { remove(originalPageIndex) }
+        undoStacksByPage = undoStacksByPage.toMutableMap().apply {
+            val current = (this[originalPageIndex]?.toMutableList() ?: mutableListOf())
+            current.add(HighlightMark(unrotatedRects, colorArgb))
+            put(originalPageIndex, current)
         }
         hasUnsavedHighlights = true
     }
@@ -110,6 +123,8 @@ class HighlightManager {
      */
     fun clearAllHighlights() {
         highlightsByPage = emptyMap()
+        undoStacksByPage = emptyMap()
+        redoStacksByPage = emptyMap()
         hasUnsavedHighlights = true
     }
 
@@ -120,7 +135,30 @@ class HighlightManager {
         highlightsByPage = highlightsByPage.toMutableMap().apply { 
             remove(pageIndex) 
         }
+        // Clear stacks for that page
+        undoStacksByPage = undoStacksByPage.toMutableMap().apply { remove(pageIndex) }
+        redoStacksByPage = redoStacksByPage.toMutableMap().apply { remove(pageIndex) }
         hasUnsavedHighlights = true
+    }
+
+    /**
+     * Undo the last highlight added for a page (no-op if none)
+     */
+    fun undoLastHighlightForPage(pageIndex: Int) {
+        val current = highlightsByPage[pageIndex]?.toMutableList() ?: return
+        if (current.isNotEmpty()) {
+            val removed = current.removeLast()
+            highlightsByPage = highlightsByPage.toMutableMap().apply {
+                if (current.isEmpty()) remove(pageIndex) else put(pageIndex, current)
+            }
+            // Push removed to redo stack
+            redoStacksByPage = redoStacksByPage.toMutableMap().apply {
+                val stack = (this[pageIndex]?.toMutableList() ?: mutableListOf())
+                stack.add(removed)
+                put(pageIndex, stack)
+            }
+            hasUnsavedHighlights = true
+        }
     }
 
     /**
@@ -128,6 +166,11 @@ class HighlightManager {
      */
     fun markHighlightsSaved() {
         hasUnsavedHighlights = false
+        // Update baseline to current saved state
+        baselineHighlightsByPage = highlightsByPage
+        // clear redo/undo as baseline changed
+        undoStacksByPage = emptyMap()
+        redoStacksByPage = emptyMap()
     }
 
     /**
@@ -135,6 +178,49 @@ class HighlightManager {
      */
     fun setHighlights(newHighlights: Map<Int, List<HighlightMark>>) {
         highlightsByPage = newHighlights
+        // Reset stacks on set and update baseline
+        undoStacksByPage = emptyMap()
+        redoStacksByPage = emptyMap()
+        baselineHighlightsByPage = newHighlights
+        hasUnsavedHighlights = false
+    }
+
+    fun redoLastHighlightForPage(pageIndex: Int) {
+        val redoStack = redoStacksByPage[pageIndex]?.toMutableList() ?: return
+        if (redoStack.isNotEmpty()) {
+            val toRestore = redoStack.removeLast()
+            // restore to highlights
+            val list = (highlightsByPage[pageIndex]?.toMutableList() ?: mutableListOf())
+            list.add(toRestore)
+            highlightsByPage = highlightsByPage.toMutableMap().apply { put(pageIndex, list) }
+            // update redo stack
+            redoStacksByPage = redoStacksByPage.toMutableMap().apply {
+                if (redoStack.isEmpty()) remove(pageIndex) else put(pageIndex, redoStack)
+            }
+            // update undo stack to reflect this forward move
+            undoStacksByPage = undoStacksByPage.toMutableMap().apply {
+                val stack = (this[pageIndex]?.toMutableList() ?: mutableListOf())
+                stack.add(toRestore)
+                put(pageIndex, stack)
+            }
+            hasUnsavedHighlights = true
+        }
+    }
+
+    fun canUndoForPage(pageIndex: Int): Boolean {
+        val current = highlightsByPage[pageIndex]
+        return current != null && current.isNotEmpty()
+    }
+
+    fun canRedoForPage(pageIndex: Int): Boolean {
+        val stack = redoStacksByPage[pageIndex]
+        return stack != null && stack.isNotEmpty()
+    }
+
+    fun revertUnsavedHighlights() {
+        highlightsByPage = baselineHighlightsByPage
+        undoStacksByPage = emptyMap()
+        redoStacksByPage = emptyMap()
         hasUnsavedHighlights = false
     }
 }

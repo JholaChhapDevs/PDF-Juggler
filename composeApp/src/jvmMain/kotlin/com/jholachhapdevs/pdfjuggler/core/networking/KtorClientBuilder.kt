@@ -26,7 +26,7 @@ fun buildHttpClient(engine: HttpClientEngine): HttpClient {
                     println(message)
                 }
             }
-            level = LogLevel.BODY
+            level = LogLevel.INFO
         }
 
         install(HttpTimeout) {

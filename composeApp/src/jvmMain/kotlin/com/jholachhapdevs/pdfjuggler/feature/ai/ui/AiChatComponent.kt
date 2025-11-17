@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,9 +45,12 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.jholachhapdevs.pdfjuggler.core.datastore.PrefsManager
+import kotlinx.coroutines.launch
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isShiftPressed
@@ -57,7 +61,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.jholachhapdevs.pdfjuggler.core.datastore.ApiKeyStore
 import com.jholachhapdevs.pdfjuggler.feature.ai.domain.model.ChatMessage
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.ApiKeyDialog
 import com.mikepenz.markdown.m3.Markdown
 
 @Composable
@@ -66,6 +72,12 @@ fun AiChatComponent(screenModel: AiScreenModel) {
     val cs = MaterialTheme.colorScheme
     val listState = rememberLazyListState()
     val clipboard = LocalClipboardManager.current
+
+    // API key state
+    var apiKey by remember { mutableStateOf("") }
+    var showApiDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { apiKey = com.jholachhapdevs.pdfjuggler.core.datastore.ApiKeyStore.getGeminiApiKey() ?: "" }
 
     // Auto-scroll to newest message on change
     LaunchedEffect(ui.messages.size) {
@@ -104,7 +116,7 @@ fun AiChatComponent(screenModel: AiScreenModel) {
             modifier = Modifier.fillMaxSize()
         ) {
             Column(Modifier.fillMaxSize().padding(12.dp)) {
-                // Compact header row (outlined style, no TopAppBar)
+                // Header row with key button
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -117,6 +129,12 @@ fun AiChatComponent(screenModel: AiScreenModel) {
                         color = cs.onSurface
                     )
                     Spacer(Modifier.weight(1f))
+                    IconButton(
+                        onClick = { showApiDialog = true },
+                        enabled = !ui.isSending
+                    ) {
+                        Icon(Icons.Outlined.VpnKey, contentDescription = "Set API Key")
+                    }
                     IconButton(
                         onClick = { screenModel.generateCheatSheet() },
                         enabled = !ui.isSending
@@ -131,48 +149,69 @@ fun AiChatComponent(screenModel: AiScreenModel) {
                     }
                 }
 
-                // Error banner (outlined)
-                ui.error?.let { err ->
+                val hasKey = apiKey.isNotBlank()
+                if (!hasKey) {
                     Spacer(Modifier.height(8.dp))
                     Surface(
                         color = cs.surface,
                         tonalElevation = 0.dp,
                         shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, cs.error),
-                        modifier = Modifier.fillMaxWidth()
+                        border = BorderStroke(1.dp, cs.outlineVariant),
+                        modifier = Modifier.fillMaxSize()
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(
+                            modifier = Modifier.fillMaxSize().padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.ErrorOutline,
-                                contentDescription = "Error",
-                                tint = cs.error
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = err,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = cs.onSurface
-                            )
-                            Spacer(Modifier.weight(1f))
-                            IconButton(onClick = { screenModel.dismissError() }) {
-                                Icon(Icons.Outlined.Close, contentDescription = "Dismiss")
+                            Text("AI features are disabled — no API key.", color = cs.error)
+                            com.jholachhapdevs.pdfjuggler.core.ui.components.JButton(onClick = { showApiDialog = true }) {
+                                Text("Add API Key")
                             }
                         }
                     }
-                }
+                } else {
+                    // Error banner (outlined)
+                    ui.error?.let { err ->
+                        Spacer(Modifier.height(8.dp))
+                        Surface(
+                            color = cs.surface,
+                            tonalElevation = 0.dp,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, cs.error),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ErrorOutline,
+                                    contentDescription = "Error",
+                                    tint = cs.error
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = err,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = cs.onSurface
+                                )
+                                Spacer(Modifier.weight(1f))
+                                IconButton(onClick = { screenModel.dismissError() }) {
+                                    Icon(Icons.Outlined.Close, contentDescription = "Dismiss")
+                                }
+                            }
+                        }
+                    }
 
-                // Messages
-                Spacer(Modifier.height(8.dp))
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                    // Messages
+                    Spacer(Modifier.height(8.dp))
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                     items(ui.messages) { message ->
                         MessageBubble(
                             message = message,
@@ -272,6 +311,7 @@ fun AiChatComponent(screenModel: AiScreenModel) {
                 }
             }
         }
+        }
 
         // Floating jump-to-bottom (outlined)
         if (showJumpToBottom) {
@@ -291,6 +331,28 @@ fun AiChatComponent(screenModel: AiScreenModel) {
                     )
                 }
             }
+        }
+
+        // Reusable API Key dialog, controlled by header actions or empty-state button
+        if (showApiDialog) {
+            ApiKeyDialog(
+                apiKey = apiKey,
+                onSave = { key ->
+                    scope.launch {
+                    ApiKeyStore.saveGeminiApiKey(key.trim())
+                    apiKey = key.trim()
+                    }
+                    showApiDialog = false
+                },
+                onClear = {
+                    scope.launch {
+                    ApiKeyStore.clearGeminiApiKey()
+                    apiKey = ""
+                    }
+                    showApiDialog = false
+                },
+                onDismiss = { showApiDialog = false }
+            )
         }
     }
 }
@@ -325,13 +387,13 @@ private fun MessageBubble(
             border = BorderStroke(1.dp, borderColor),
             modifier = Modifier
                 .widthIn(max = 640.dp)
-                .hoverable(interactionSource = interaction)
+                .hoverable(interaction)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 SelectionContainer {
                     Markdown(
                         content = message.text,
-                        modifier = Modifier
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }

@@ -120,7 +120,7 @@ fun PrintProgressDialog(
                         onClick = onDismiss,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        JText(
+                        Text(
                             text = "Close",
                             color = MaterialTheme.colorScheme.primary
                         )

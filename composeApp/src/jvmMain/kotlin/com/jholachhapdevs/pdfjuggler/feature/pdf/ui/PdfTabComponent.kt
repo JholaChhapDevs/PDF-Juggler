@@ -16,6 +16,12 @@ import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.SendPromptUseCase
 import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.UploadFileUseCase
 import com.jholachhapdevs.pdfjuggler.feature.ai.ui.AiScreenModel
 import androidx.compose.ui.Modifier
+import com.jholachhapdevs.pdfjuggler.core.datastore.PrefsManager
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.ui.unit.dp
+import com.jholachhapdevs.pdfjuggler.core.ui.components.JButton
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.CurrentTab
@@ -66,6 +72,12 @@ fun PdfTabComponent(
             if (desired != null && tabNavigator.current != desired) {
                 tabNavigator.current = desired
             }
+        }
+
+        // Load persisted Gemini API key
+        var geminiApiKey by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(Unit) {
+            geminiApiKey = com.jholachhapdevs.pdfjuggler.core.datastore.ApiKeyStore.getGeminiApiKey()
         }
 
         // Observe pending AI request on the current tab and auto-enable AI chat panel
@@ -180,33 +192,33 @@ fun PdfTabComponent(
                         onRightTabChange = { tab -> model.setSplitViewRight(tab) },
                         ttsViewModel = ttsViewModel
                     )
-                } else if (model.isAiChatEnabled) {
-                    // AI chat mode - show PDF with AI chat panel
-                    if (currentTabModel != null) {
-                        // Create AiScreenModel for the current tab
-                        val remote = remember { GeminiRemoteDataSource() }
-                        val aiScreenModel = remember(currentTabModel.pdfFile.path) {
+                } else {
+                    // Hoist AiScreenModel so it survives AI panel show/hide
+                    val aiScreenModel = if (currentTabModel != null) {
+                        remember(currentTabModel.pdfFile.path, geminiApiKey) {
+                            val keyToUse = geminiApiKey ?: ""
+                            val remoteWithKey = GeminiRemoteDataSource(apiKey = keyToUse)
                             AiScreenModel(
                                 pdfFile = currentTabModel.pdfFile,
-                                sendPromptUseCase = SendPromptUseCase(remote),
-                                uploadFileUseCase = UploadFileUseCase(remote),
+                                sendPromptUseCase = SendPromptUseCase(remoteWithKey),
+                                uploadFileUseCase = UploadFileUseCase(remoteWithKey),
                                 initialSelectedPageIndex = currentTabModel.selectedPageIndex
                             )
                         }
+                    } else null
 
+                    if (model.isAiChatEnabled && currentTabModel != null) {
+                        // AI chat mode - show PDF with AI chat panel
                         PdfDisplayArea(
                             model = currentTabModel,
                             aiScreenModel = aiScreenModel,
                             ttsViewModel = ttsViewModel,
                             isSearchVisible = isSearchVisible,
-                            onSearchVisibilityChange = { isSearchVisible = it }
+                            onSearchVisibilityChange = { isSearchVisible = it },
+                            aiApiKey = geminiApiKey
                         )
-                    } else {
-                        CurrentTab()
-                    }
-                } else {
-                    // Normal single view mode
-                    if (currentTabModel != null) {
+                    } else if (currentTabModel != null) {
+                        // Normal single view mode
                         PdfDisplayArea(
                             model = currentTabModel,
                             aiScreenModel = null,

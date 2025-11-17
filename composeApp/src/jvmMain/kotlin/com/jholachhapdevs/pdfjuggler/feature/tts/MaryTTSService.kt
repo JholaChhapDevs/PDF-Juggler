@@ -13,6 +13,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import java.util.concurrent.atomic.AtomicBoolean
 import java.io.ByteArrayInputStream
+import java.io.File
 import javax.sound.sampled.*
 import marytts.LocalMaryInterface
 import marytts.modules.synthesis.Voice
@@ -51,8 +52,16 @@ class MaryTTSService : TTSService, WordTrackingTTS {
 
             _state.value = TTSState.IDLE
 
-            // Initialize MaryTTS
-            maryTTS = LocalMaryInterface()
+            // Configure MaryTTS system properties for packaged environment
+            configureMaryTTSForPackaging()
+
+            // Initialize MaryTTS with error handling
+            maryTTS = try {
+                LocalMaryInterface()
+            } catch (e: Exception) {
+                // If MaryTTS fails due to SQL issues, return error to allow fallback
+                throw e
+            }
 
             println("DEBUG: MaryTTS initialized successfully")
 
@@ -60,13 +69,13 @@ class MaryTTSService : TTSService, WordTrackingTTS {
             TTSResult.Success
         } catch (e: Exception) {
             _state.value = TTSState.ERROR
-            TTSResult.Error("Failed to initialize MaryTTS: ${e.message}", e)
+            TTSResult.Error("Failed to initialize MaryTTS: ${e.message}. This may occur when running from packaged installation.", e)
         }
     }
 
     override suspend fun speak(text: String, config: TTSConfig): TTSResult = withContext(Dispatchers.IO) {
         try {
-            println("DEBUG: speak() called with text: '$text' (${text.length} characters)")
+            // println("DEBUG: speak() called with text: '$text' (${text.length} characters)")
             val startTime = System.currentTimeMillis()
 
             if (!isInitialized.get()) {
@@ -85,7 +94,7 @@ class MaryTTSService : TTSService, WordTrackingTTS {
             currentWords = text.split("\\s+".toRegex()).filter { it.isNotBlank() }
             _currentWordIndex.value = -1
 
-            println("DEBUG: Split into ${currentWords.size} words")
+            // println("DEBUG: Split into ${currentWords.size} words")
 
             _state.value = TTSState.SPEAKING
             isSpeaking.set(true)
@@ -358,11 +367,11 @@ class MaryTTSService : TTSService, WordTrackingTTS {
                         totalBytesWritten += written
                     }
 
-                    // Log progress occasionally
-                    if (totalBytesWritten % 32768 == 0) {
-                        val elapsed = System.currentTimeMillis() - audioStart
-                        println("DEBUG: Streamed ${totalBytesWritten} bytes in ${elapsed}ms")
-                    }
+                    // Log progress occasionally (commented out to reduce noise)
+                    // if (totalBytesWritten % 32768 == 0) {
+                    //     val elapsed = System.currentTimeMillis() - audioStart
+                    //     println("DEBUG: Streamed ${totalBytesWritten} bytes in ${elapsed}ms")
+                    // }
                 }
             } finally {
                 // Ensure all buffered data is played
@@ -642,6 +651,88 @@ class MaryTTSService : TTSService, WordTrackingTTS {
             maryTTS = null
         } catch (e: Exception) {
             // Ignore release errors
+        }
+    }
+
+    /**
+     * Configure MaryTTS system properties for packaged environment
+     * This fixes SQLException issues by disabling database logging
+     */
+    private fun configureMaryTTSForPackaging() {
+        try {
+            // Set temporary directory for MaryTTS files
+            val tempDir = System.getProperty("java.io.tmpdir")
+            val maryTempDir = File(tempDir, "marytts-temp")
+            if (!maryTempDir.exists()) {
+                maryTempDir.mkdirs()
+            }
+            
+            // Configure MaryTTS directories to use temp locations
+            System.setProperty("mary.base", maryTempDir.absolutePath)
+            System.setProperty("mary.installedDir", maryTempDir.absolutePath)
+            System.setProperty("mary.downloadDir", maryTempDir.absolutePath)
+            System.setProperty("mary.tmpdir", maryTempDir.absolutePath)
+            System.setProperty("mary.userdir", maryTempDir.absolutePath)
+            
+            // Completely disable all logging systems
+            System.setProperty("mary.log.level", "OFF")
+            System.setProperty("mary.logfile", "")
+            System.setProperty("mary.log.tofile", "false")
+            
+            // Disable Log4J completely
+            System.setProperty("log4j.rootLogger", "OFF")
+            System.setProperty("log4j.logger.marytts", "OFF")
+            System.setProperty("log4j.logger.mary", "OFF")
+            System.setProperty("log4j.defaultInitOverride", "true")
+            
+            // Disable Derby database completely
+            System.setProperty("derby.stream.error.method", "com.jholachhapdevs.pdfjuggler.feature.tts.MaryTTSService.disableDerbyLogging")
+            System.setProperty("derby.stream.error.logSeverityLevel", "0")
+            System.setProperty("derby.system.home", maryTempDir.absolutePath)
+            System.setProperty("derby.storage.fileSyncTransactionLog", "false")
+            System.setProperty("derby.storage.logArchiveMode", "false")
+            System.setProperty("derby.infolog.append", "false")
+            System.setProperty("derby.language.logStatementText", "false")
+            
+            // Additional Derby properties to prevent database creation
+            System.setProperty("derby.system.durability", "test")
+            System.setProperty("derby.database.sqlAuthorization", "false")
+            System.setProperty("derby.connection.requireAuthentication", "false")
+            
+            // Java Util Logging (JUL) - disable completely
+            System.setProperty("java.util.logging.config.file", "")
+            System.setProperty("java.util.logging.manager", "java.util.logging.LogManager")
+            
+            // Disable SLF4J logging
+            System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "off")
+            System.setProperty("slf4j.provider", "none")
+            
+            // Configure Java's logging to be silent
+            val rootLogger = java.util.logging.Logger.getLogger("")
+            rootLogger.level = java.util.logging.Level.OFF
+            rootLogger.handlers.forEach { it.level = java.util.logging.Level.OFF }
+            
+            // Disable MaryTTS specific logging
+            System.setProperty("mary.debug", "false")
+            System.setProperty("mary.quiet", "true")
+            
+            // Additional database prevention properties
+            System.setProperty("derby.drda.startNetworkServer", "false")
+            System.setProperty("derby.system.bootAll", "false")
+            
+        } catch (e: Exception) {
+            // Silent error handling for packaging configuration
+        }
+    }
+    
+    companion object {
+        /**
+         * Method to disable Derby logging - called by system property
+         */
+        @JvmStatic
+        fun disableDerbyLogging(): java.io.PrintStream? {
+            // Return null to disable Derby error logging
+            return null
         }
     }
 }

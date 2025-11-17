@@ -6,6 +6,7 @@ import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.PDPageContentStream
 import org.apache.pdfbox.pdmodel.common.PDRectangle
+import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject
 import org.apache.pdfbox.printing.PDFPageable
 import org.apache.pdfbox.util.Matrix
 import java.awt.print.PrinterJob
@@ -17,9 +18,6 @@ import javax.print.attribute.standard.Sides
 
 class PdfGenerationService {
 
-    /**
-     * Generate PDF and directly open print dialog without saving
-     */
     fun generateAndPrint(sourcePath: String, options: PrintOptions, copies: Int = 1, duplex: Boolean = false) {
         val sourceDoc = PDDocument.load(File(sourcePath))
         val outputDoc = PDDocument()
@@ -35,7 +33,6 @@ class PdfGenerationService {
                 generatePagesPerSheet(sourceDoc, outputDoc, options.pagesPerSheet)
             }
 
-            // Print directly without saving to file
             printDocument(outputDoc, copies, duplex)
 
         } finally {
@@ -44,25 +41,14 @@ class PdfGenerationService {
         }
     }
 
-    /**
-     * Generate PDF, save it, then print
-     */
     fun generateSaveAndPrint(sourcePath: String, outputPath: String, options: PrintOptions, copies: Int = 1, duplex: Boolean = false) {
-        // Generate and save PDF
         generatePdf(sourcePath, outputPath, options)
-
-        // Print the saved PDF
         printPdf(outputPath, copies, duplex)
     }
 
-    /**
-     * Print a PDDocument directly (opens print dialog)
-     */
     private fun printDocument(document: PDDocument, copies: Int = 1, duplex: Boolean = false): Boolean {
         return try {
             val printerJob = PrinterJob.getPrinterJob()
-
-            // Set up print attributes
             val attributes = HashPrintRequestAttributeSet()
             attributes.add(Copies(copies))
 
@@ -70,10 +56,8 @@ class PdfGenerationService {
                 attributes.add(Sides.DUPLEX)
             }
 
-            // Use PDFPageable for better page handling
             printerJob.setPageable(PDFPageable(document))
 
-            // Show print dialog
             if (printerJob.printDialog(attributes)) {
                 printerJob.print(attributes)
                 return true
@@ -85,9 +69,6 @@ class PdfGenerationService {
         }
     }
 
-    /**
-     * Print an existing PDF file (opens print dialog)
-     */
     fun printPdf(pdfPath: String, copies: Int = 1, duplex: Boolean = false): Boolean {
         val document = PDDocument.load(File(pdfPath))
 
@@ -98,16 +79,11 @@ class PdfGenerationService {
         }
     }
 
-    /**
-     * Print directly to default printer without dialog
-     */
     fun printPdfSilently(pdfPath: String, copies: Int = 1, duplex: Boolean = false): Boolean {
         val document = PDDocument.load(File(pdfPath))
 
         return try {
             val printerJob = PrinterJob.getPrinterJob()
-
-            // Get default printer
             val printService = PrintServiceLookup.lookupDefaultPrintService()
             if (printService == null) {
                 println("No default printer found")
@@ -115,8 +91,6 @@ class PdfGenerationService {
             }
 
             printerJob.printService = printService
-
-            // Set up print attributes
             val attributes = HashPrintRequestAttributeSet()
             attributes.add(Copies(copies))
 
@@ -125,8 +99,6 @@ class PdfGenerationService {
             }
 
             printerJob.setPageable(PDFPageable(document))
-
-            // Print without dialog
             printerJob.print(attributes)
             true
         } catch (e: Exception) {
@@ -137,16 +109,11 @@ class PdfGenerationService {
         }
     }
 
-    /**
-     * Print to a specific printer without dialog
-     */
     fun printPdfToSpecificPrinter(pdfPath: String, printerName: String, copies: Int = 1, duplex: Boolean = false): Boolean {
         val document = PDDocument.load(File(pdfPath))
 
         return try {
             val printerJob = PrinterJob.getPrinterJob()
-
-            // Find the printer
             val printServices = PrintServiceLookup.lookupPrintServices(null, null)
             val printService = printServices.find { it.name.equals(printerName, ignoreCase = true) }
 
@@ -156,8 +123,6 @@ class PdfGenerationService {
             }
 
             printerJob.printService = printService
-
-            // Set up print attributes
             val attributes = HashPrintRequestAttributeSet()
             attributes.add(Copies(copies))
 
@@ -166,8 +131,6 @@ class PdfGenerationService {
             }
 
             printerJob.setPageable(PDFPageable(document))
-
-            // Print without dialog
             printerJob.print(attributes)
             true
         } catch (e: Exception) {
@@ -178,179 +141,328 @@ class PdfGenerationService {
         }
     }
 
-    /**
-     * Get list of available printers
-     */
     fun getAvailablePrinters(): List<String> {
         val printServices = PrintServiceLookup.lookupPrintServices(null, null)
         return printServices.map { it.name }
     }
 
     fun generatePdf(sourcePath: String, outputPath: String, options: PrintOptions) {
-        val sourceDoc = PDDocument.load(File(sourcePath))
-        val outputDoc = PDDocument()
+        println("Starting PDF generation: source=$sourcePath, output=$outputPath")
+        println("Options: pagesPerSheet=${options.pagesPerSheet}, booklet=${options.bookletFormat}")
+
+        var sourceDoc: PDDocument? = null
+        var outputDoc: PDDocument? = null
 
         try {
+            sourceDoc = PDDocument.load(File(sourcePath))
+            println("Source document loaded successfully. Pages: ${sourceDoc.numberOfPages}")
+
+            outputDoc = PDDocument()
+
             if (!options.includeAnnotations) {
                 sourceDoc.pages.forEach { it.annotations = emptyList() }
             }
 
             if (options.bookletFormat) {
+                println("Generating booklet format...")
                 generateBooklet(sourceDoc, outputDoc)
             } else {
+                println("Generating ${options.pagesPerSheet} pages per sheet...")
                 generatePagesPerSheet(sourceDoc, outputDoc, options.pagesPerSheet)
             }
-            outputDoc.save(outputPath)
+
+            println("Output document has ${outputDoc.numberOfPages} pages")
+
+            // Ensure output directory exists
+            val outputFile = File(outputPath)
+            outputFile.parentFile?.mkdirs()
+
+            println("Saving to: ${outputFile.absolutePath}")
+            outputDoc.save(outputFile)
+            println("PDF saved successfully. File size: ${outputFile.length()} bytes")
+
+        } catch (e: Exception) {
+            println("Error generating PDF: ${e.message}")
+            e.printStackTrace()
+            throw e
         } finally {
-            sourceDoc.close()
-            outputDoc.close()
+            sourceDoc?.close()
+            outputDoc?.close()
+            println("Documents closed")
         }
     }
 
     private fun generatePagesPerSheet(sourceDoc: PDDocument, outputDoc: PDDocument, pagesPerSheet: Int) {
         val sourcePages = sourceDoc.pages.toList()
-        val layerUtility = LayerUtility(outputDoc)
+        println("generatePagesPerSheet: sourcePages=${sourcePages.size}, pagesPerSheet=$pagesPerSheet")
 
-        // If only 1 page per sheet, import pages properly
-        if (pagesPerSheet <= 1) {
-            sourcePages.forEach { sourcePage ->
-                val targetPage = PDPage(sourcePage.mediaBox)
-                outputDoc.addPage(targetPage)
-
-                val contentStream = PDPageContentStream(outputDoc, targetPage)
-                try {
-                    val form = layerUtility.importPageAsForm(sourceDoc, sourcePage)
-                    contentStream.drawForm(form)
-                } finally {
-                    contentStream.close()
-                }
-            }
+        if (sourcePages.isEmpty()) {
+            println("ERROR: No pages found in source document")
             return
         }
 
-        val pageGroups = sourcePages.chunked(pagesPerSheet)
+        // Create a temporary document to flatten problematic PDFs
+        val tempDoc = PDDocument()
+        val layerUtility = LayerUtility(tempDoc)
 
-        for (group in pageGroups) {
-            val targetPageSize = PDRectangle.A4
-            val targetPage = PDPage(targetPageSize)
-            outputDoc.addPage(targetPage)
-
-            val contentStream = PDPageContentStream(outputDoc, targetPage)
-
+        // Import all pages to temp doc first (this handles complex PDFs better)
+        sourcePages.forEachIndexed { index, page ->
             try {
-                // Use 2 columns for 2-4 pages
-                val cols = 2
-                val rows = if (pagesPerSheet == 2) 1 else 2
+                val form = layerUtility.importPageAsForm(sourceDoc, index)
+                val tempPage = PDPage(page.mediaBox)
+                tempDoc.addPage(tempPage)
+
+                val tempStream = PDPageContentStream(tempDoc, tempPage, PDPageContentStream.AppendMode.APPEND, true)
+                tempStream.drawForm(form)
+                tempStream.close()
+            } catch (e: Exception) {
+                println("Error importing page $index: ${e.message}")
+                // If import fails, try to copy the page directly
+                tempDoc.addPage(page)
+            }
+        }
+
+        val outputLayerUtility = LayerUtility(outputDoc)
+
+        // Handle single page per sheet
+        if (pagesPerSheet <= 1) {
+            println("Processing 1 page per sheet (simple copy)")
+            tempDoc.pages.forEachIndexed { index, page ->
+                try {
+                    outputDoc.addPage(page)
+                    println("Added page ${index + 1}")
+                } catch (e: Exception) {
+                    println("Error processing page $index: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+            tempDoc.close()
+            return
+        }
+
+        val tempPages = tempDoc.pages.toList()
+        val pageGroups = tempPages.chunked(pagesPerSheet)
+        println("Created ${pageGroups.size} groups")
+
+        // Determine layout based on pages per sheet
+        val (cols, rows) = when (pagesPerSheet) {
+            2 -> Pair(2, 1)
+            3, 4 -> Pair(2, 2)
+            6 -> Pair(3, 2)
+            8, 9 -> Pair(3, 3)
+            else -> Pair(2, 2)
+        }
+        println("Layout: ${cols}x${rows}")
+
+        pageGroups.forEachIndexed { groupIndex, group ->
+            try {
+                val targetPageSize = PDRectangle.A4
+                val targetPage = PDPage(targetPageSize)
+                outputDoc.addPage(targetPage)
+
+                val contentStream = PDPageContentStream(
+                    outputDoc,
+                    targetPage,
+                    PDPageContentStream.AppendMode.APPEND,
+                    true
+                )
 
                 val cellWidth = targetPageSize.width / cols
                 val cellHeight = targetPageSize.height / rows
+                println("Group $groupIndex: cellWidth=$cellWidth, cellHeight=$cellHeight")
 
-                group.forEachIndexed { index, sourcePage ->
+                group.forEachIndexed { index, _ ->
                     try {
-                        val form = layerUtility.importPageAsForm(sourceDoc, sourcePage)
+                        val pageIndex = groupIndex * pagesPerSheet + index
+                        val form = outputLayerUtility.importPageAsForm(tempDoc, pageIndex)
 
                         val col = index % cols
                         val row = index / cols
 
-                        val targetX = col * cellWidth
-                        val targetY = targetPageSize.height - ((row + 1) * cellHeight)
-
-                        val sourceSize = sourcePage.mediaBox
-                        val scale = minOf(cellWidth / sourceSize.width, cellHeight / sourceSize.height) * 0.90f
+                        val sourceSize = tempPages[pageIndex].mediaBox
+                        val scaleX = cellWidth / sourceSize.width
+                        val scaleY = cellHeight / sourceSize.height
+                        val scale = minOf(scaleX, scaleY) * 0.90f
 
                         val scaledWidth = sourceSize.width * scale
                         val scaledHeight = sourceSize.height * scale
 
-                        // Center the page within the cell
-                        val xOffset = targetX + (cellWidth - scaledWidth) / 2
-                        val yOffset = targetY + (cellHeight - scaledHeight) / 2
+                        val xOffset = col * cellWidth + (cellWidth - scaledWidth) / 2
+                        val yOffset = targetPageSize.height - (row + 1) * cellHeight + (cellHeight - scaledHeight) / 2
 
-                        val matrix = Matrix()
-                        matrix.translate(xOffset, yOffset)
-                        matrix.scale(scale, scale)
+                        println("Page $pageIndex: pos=($col,$row), offset=($xOffset,$yOffset), scale=$scale")
 
                         contentStream.saveGraphicsState()
-                        contentStream.transform(matrix)
+                        contentStream.transform(Matrix.getTranslateInstance(xOffset, yOffset))
+                        contentStream.transform(Matrix.getScaleInstance(scale, scale))
                         contentStream.drawForm(form)
                         contentStream.restoreGraphicsState()
+
                     } catch (e: Exception) {
+                        println("Error drawing page at index $index in group $groupIndex: ${e.message}")
                         e.printStackTrace()
                     }
                 }
-            } finally {
+
                 contentStream.close()
+                println("Completed group $groupIndex")
+
+            } catch (e: Exception) {
+                println("Error processing group $groupIndex: ${e.message}")
+                e.printStackTrace()
             }
         }
+
+        tempDoc.close()
     }
 
     private fun generateBooklet(sourceDoc: PDDocument, outputDoc: PDDocument) {
         val sourcePages = sourceDoc.pages.toList()
-        val totalPages = sourcePages.size
+        println("generateBooklet: sourcePages=${sourcePages.size}")
+
+        if (sourcePages.isEmpty()) {
+            println("ERROR: No pages found in source document")
+            return
+        }
+
+        // Create a temporary document to flatten problematic PDFs
+        val tempDoc = PDDocument()
+        val layerUtility = LayerUtility(tempDoc)
+
+        // Import all pages to temp doc first
+        sourcePages.forEachIndexed { index, page ->
+            try {
+                val form = layerUtility.importPageAsForm(sourceDoc, index)
+                val tempPage = PDPage(page.mediaBox)
+                tempDoc.addPage(tempPage)
+
+                val tempStream = PDPageContentStream(tempDoc, tempPage, PDPageContentStream.AppendMode.APPEND, true)
+                tempStream.drawForm(form)
+                tempStream.close()
+                println("Successfully flattened page $index for booklet")
+            } catch (e: Exception) {
+                println("Error importing page $index, trying direct copy: ${e.message}")
+                // If import fails, try to copy the page directly
+                try {
+                    tempDoc.addPage(page)
+                } catch (e2: Exception) {
+                    println("Failed to copy page $index: ${e2.message}")
+                    e2.printStackTrace()
+                }
+            }
+        }
+
+        val totalPages = tempDoc.numberOfPages
         val sheets = (totalPages + 3) / 4
         val bookletPages = sheets * 4
+        println("Booklet: totalPages=$totalPages, sheets=$sheets, bookletPages=$bookletPages")
 
-        val layerUtility = LayerUtility(outputDoc)
+        if (totalPages == 0) {
+            println("ERROR: No pages in temp document after flattening")
+            tempDoc.close()
+            return
+        }
+
+        val outputLayerUtility = LayerUtility(outputDoc)
 
         for (i in 0 until sheets) {
-            val page1Index = i * 2
-            val page2Index = bookletPages - 1 - (i * 2)
+            // Calculate page indices for booklet ordering
+            val page1Index = bookletPages - 1 - (i * 2)
+            val page2Index = i * 2
             val page3Index = i * 2 + 1
             val page4Index = bookletPages - 2 - (i * 2)
 
-            val targetPage = PDPage(PDRectangle.A4)
-            outputDoc.addPage(targetPage)
+            println("Sheet $i: pages [$page2Index, $page1Index] and [$page3Index, $page4Index]")
 
-            val contentStream = PDPageContentStream(outputDoc, targetPage)
+            // First sheet (outer pages) - Use landscape A4
+            val targetPage1 = PDPage(PDRectangle(PDRectangle.A4.height, PDRectangle.A4.width))
+            outputDoc.addPage(targetPage1)
+
+            val contentStream1 = PDPageContentStream(
+                outputDoc,
+                targetPage1,
+                PDPageContentStream.AppendMode.APPEND,
+                true
+            )
 
             if (page2Index < totalPages) {
-                drawPageForBooklet(layerUtility, contentStream, sourceDoc, sourcePages[page2Index], targetPage.mediaBox, true)
+                println("Drawing left page: $page2Index")
+                drawPageForBooklet(outputLayerUtility, contentStream1, tempDoc, page2Index, targetPage1.mediaBox, false)
             }
-
             if (page1Index < totalPages) {
-                drawPageForBooklet(layerUtility, contentStream, sourceDoc, sourcePages[page1Index], targetPage.mediaBox, false)
+                println("Drawing right page: $page1Index")
+                drawPageForBooklet(outputLayerUtility, contentStream1, tempDoc, page1Index, targetPage1.mediaBox, true)
             }
+            contentStream1.close()
 
-            contentStream.close()
-
-            val targetPage2 = PDPage(PDRectangle.A4)
+            // Second sheet (inner pages) - Use landscape A4
+            val targetPage2 = PDPage(PDRectangle(PDRectangle.A4.height, PDRectangle.A4.width))
             outputDoc.addPage(targetPage2)
 
-            val contentStream2 = PDPageContentStream(outputDoc, targetPage2)
+            val contentStream2 = PDPageContentStream(
+                outputDoc,
+                targetPage2,
+                PDPageContentStream.AppendMode.APPEND,
+                true
+            )
 
             if (page3Index < totalPages) {
-                drawPageForBooklet(layerUtility, contentStream2, sourceDoc, sourcePages[page3Index], targetPage2.mediaBox, false)
+                println("Drawing left page: $page3Index")
+                drawPageForBooklet(outputLayerUtility, contentStream2, tempDoc, page3Index, targetPage2.mediaBox, false)
             }
-
             if (page4Index < totalPages) {
-                drawPageForBooklet(layerUtility, contentStream2, sourceDoc, sourcePages[page4Index], targetPage2.mediaBox, true)
+                println("Drawing right page: $page4Index")
+                drawPageForBooklet(outputLayerUtility, contentStream2, tempDoc, page4Index, targetPage2.mediaBox, true)
             }
-
             contentStream2.close()
         }
+
+        tempDoc.close()
     }
 
-    private fun drawPageForBooklet(layerUtility: LayerUtility, contentStream: PDPageContentStream, sourceDoc: PDDocument, sourcePage: PDPage, targetMediaBox: PDRectangle, isRight: Boolean) {
-        val form = layerUtility.importPageAsForm(sourceDoc, sourcePage)
-        val sourceSize = sourcePage.mediaBox
+    private fun drawPageForBooklet(
+        layerUtility: LayerUtility,
+        contentStream: PDPageContentStream,
+        sourceDoc: PDDocument,
+        pageIndex: Int,
+        targetMediaBox: PDRectangle,
+        isRight: Boolean
+    ) {
+        try {
+            val form = layerUtility.importPageAsForm(sourceDoc, pageIndex)
+            val sourcePage = sourceDoc.getPage(pageIndex)
+            val sourceSize = sourcePage.mediaBox
 
-        val cellWidth = targetMediaBox.width / 2
-        val cellHeight = targetMediaBox.height
+            // Each page occupies half of the landscape page (left or right)
+            val cellWidth = targetMediaBox.width / 2
+            val cellHeight = targetMediaBox.height
 
-        val scale = minOf(cellWidth / sourceSize.width, cellHeight / sourceSize.height)
+            val scaleX = cellWidth / sourceSize.width
+            val scaleY = cellHeight / sourceSize.height
+            val scale = minOf(scaleX, scaleY) * 0.98f
 
-        val scaledWidth = sourceSize.width * scale
-        val scaledHeight = sourceSize.height * scale
+            val scaledWidth = sourceSize.width * scale
+            val scaledHeight = sourceSize.height * scale
 
-        val xOffset = if (isRight) cellWidth + (cellWidth - scaledWidth) / 2 else (cellWidth - scaledWidth) / 2
-        val yOffset = (cellHeight - scaledHeight) / 2
+            // Center horizontally in the half, and vertically on the page
+            val xOffset = if (isRight) {
+                cellWidth + (cellWidth - scaledWidth) / 2
+            } else {
+                (cellWidth - scaledWidth) / 2
+            }
+            val yOffset = (cellHeight - scaledHeight) / 2
 
-        val matrix = Matrix()
-        matrix.translate(xOffset, yOffset)
-        matrix.scale(scale, scale)
+            println("Booklet page $pageIndex: isRight=$isRight, offset=($xOffset,$yOffset), scale=$scale, cell=${cellWidth}x${cellHeight}")
 
-        contentStream.saveGraphicsState()
-        contentStream.transform(matrix)
-        contentStream.drawForm(form)
-        contentStream.restoreGraphicsState()
+            contentStream.saveGraphicsState()
+            contentStream.transform(Matrix.getTranslateInstance(xOffset, yOffset))
+            contentStream.transform(Matrix.getScaleInstance(scale, scale))
+            contentStream.drawForm(form)
+            contentStream.restoreGraphicsState()
+
+        } catch (e: Exception) {
+            println("Error drawing booklet page $pageIndex: ${e.message}")
+            e.printStackTrace()
+        }
     }
 }

@@ -21,6 +21,9 @@ class BookmarkManager(
     var bookmarks by mutableStateOf<List<BookmarkData>>(emptyList())
         private set
 
+    // Snapshot of last saved state for revert
+    private var baselineBookmarks: List<BookmarkData> = emptyList()
+
     var hasUnsavedBookmarks by mutableStateOf(false)
         private set
 
@@ -102,6 +105,7 @@ class BookmarkManager(
                         val loadedBookmarks = TabScreenUtils.deserializeBookmarks(bookmarksJson)
                         println("Loaded ${loadedBookmarks.size} bookmarks")
                         bookmarks = loadedBookmarks
+                        baselineBookmarks = loadedBookmarks // update baseline to metadata state
                         loadedBookmarks
                     } else {
                         println("No bookmarks found in metadata")
@@ -152,6 +156,7 @@ class BookmarkManager(
                 }
 
                 hasUnsavedBookmarks = false
+                baselineBookmarks = bookmarks // update baseline after save
                 SaveResult.Success(pdfFile.path, bookmarks.size, "${bookmarks.size} bookmark(s) saved successfully")
 
             } catch (e: Exception) {
@@ -196,6 +201,7 @@ class BookmarkManager(
      */
     fun initializeBookmarks(newBookmarks: List<BookmarkData>) {
         bookmarks = newBookmarks
+        baselineBookmarks = newBookmarks
         hasUnsavedBookmarks = false
     }
 
@@ -203,6 +209,14 @@ class BookmarkManager(
      * Mark bookmarks as saved
      */
     fun markBookmarksSaved() {
+        hasUnsavedBookmarks = false
+    }
+
+    /**
+     * Revert to last saved (baseline) bookmarks.
+     */
+    fun revertUnsavedBookmarks() {
+        bookmarks = baselineBookmarks
         hasUnsavedBookmarks = false
     }
 }

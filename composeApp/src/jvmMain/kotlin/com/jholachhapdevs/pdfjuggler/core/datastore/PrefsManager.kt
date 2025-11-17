@@ -12,9 +12,9 @@ object PrefsManager {
 
     private val mutex = Mutex()
     private val prefsFile: File by lazy {
-        val dir = File(System.getProperty("user.home"), ".mwiPrefs")
+        val dir = File(System.getProperty("user.home"), ".jugglerPrefs")
         if (!dir.exists()) dir.mkdirs()
-        val f = File(dir, "mwi_prefs")
+        val f = File(dir, "juggler_prefs")
         if (!f.exists()) f.createNewFile()
         f
     }
@@ -38,7 +38,7 @@ object PrefsManager {
     }
 
     // --- Public API ---
-    suspend fun getString(key: String) = withContext(Dispatchers.Default) {
+    suspend fun getString(key: String): String? = withContext(Dispatchers.Default) {
         mutex.withLock { loadProperties().getProperty(key) }
     }
 

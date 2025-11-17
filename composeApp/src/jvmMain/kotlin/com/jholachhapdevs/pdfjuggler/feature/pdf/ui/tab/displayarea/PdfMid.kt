@@ -41,6 +41,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
 import com.jholachhapdevs.pdfjuggler.feature.pdf.domain.model.HighlightMark
+import com.jholachhapdevs.pdfjuggler.feature.pdf.ui.tab.TabScreenUtils
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -79,7 +80,8 @@ fun PdfMid(
     currentPageIndex: Int = 0,
     totalPages: Int = 0,
     onPreviousPage: () -> Unit = {},
-    onNextPage: () -> Unit = {}
+    onNextPage: () -> Unit = {},
+    showLoading: Boolean = false
 ) {
     val cs = MaterialTheme.colorScheme
     val clipboardManager = LocalClipboardManager.current
@@ -98,6 +100,9 @@ fun PdfMid(
     // Context menu state
     var ctxMenuOpen by remember { mutableStateOf(false) }
     var ctxMenuPos by remember { mutableStateOf(Offset.Zero) }
+
+    // Cache rotation-to-int conversion once per rotation change
+    // (initialized after helper declaration below)
 
     // Clear selection when switching pages (when textData changes)
     LaunchedEffect(textData) {
@@ -135,114 +140,118 @@ fun PdfMid(
         }
     }
 
-    fun mergeRectsOnLines(rects: List<Rect>): List<Rect> {
-        if (rects.isEmpty()) return emptyList()
-        val sorted = rects.sortedWith(compareBy({ it.top }, { it.left }))
-        val merged = mutableListOf<Rect>()
-
-        val heights = sorted.map { it.height }.sorted()
-        val medianH = heights[heights.size / 2]
-        val lineTol = medianH * 0.7f // a bit more tolerant vertically
-        val gapTol = medianH * 1.0f // wider gap tolerance to better connect fragments
-
-        var currentLine = mutableListOf<Rect>()
-        var currentLineTop = sorted.first().top
-
-        fun flushLine() {
-            if (currentLine.isEmpty()) return
-            currentLine.sortBy { it.left }
-            var acc = currentLine.first()
-            for (i in 1 until currentLine.size) {
-                val r = currentLine[i]
-                val sameRow = abs(r.top - acc.top) <= lineTol
-                val close = r.left - acc.right <= gapTol
-                if (sameRow && close) {
-                    acc = Rect(
-                        left = acc.left,
-                        top = minOf(acc.top, r.top),
-                        right = maxOf(acc.right, r.right),
-                        bottom = maxOf(acc.bottom, r.bottom)
-                    )
-                } else {
-                    merged.add(acc)
-                    acc = r
-                }
-            }
-            merged.add(acc)
-            currentLine.clear()
-        }
-
-        for (r in sorted) {
-            if (abs(r.top - currentLineTop) <= lineTol) {
-                currentLine.add(r)
-            } else {
-                flushLine()
-                currentLine.add(r)
-                currentLineTop = r.top
-            }
-        }
-        flushLine()
-        return merged
-    }
-
-    val textBoundsNormalized = remember(textData, pageImage, pageSizePoints, rotation, pageIndex) {
+    // Helper: convert a float rotation to a discrete 0/90/180/270 value
+    fun rotationToInt(rotation: Float): Int {
         val rot = ((rotation % 360f) + 360f) % 360f
-        val rotInt = when {
+        return when {
             rot in 45f..135f -> 90
             rot in 135f..225f -> 180
             rot in 225f..315f -> 270
             else -> 0
         }
+    }
+
+    // Now create cached value using the helper above
+    val rotationInt = remember(rotation) { rotationToInt(rotation) }
+
+    // Helper: normalize TextPositionData to a rotated normalized rect [0..1]
+    fun toNormalizedRotatedRect(t: TextPositionData, pdfW: Float, pdfH: Float, rotInt: Int): Rect {
+        val l = (t.x / pdfW)
+        val w = (t.width / pdfW)
+        val h = (t.height / pdfH)
+        val top = ((t.y - t.height) / pdfH)
+        val left = l.coerceAtLeast(0f)
+        val top2 = top.coerceAtLeast(0f)
+        val right = (l + w).coerceAtMost(1f)
+        val bottom = (top + h).coerceAtMost(1f)
+        val rect0 = Rect(
+            left = left,
+            top = top2,
+            right = right,
+            bottom = bottom
+        )
+        return rotateRectNormalized(rect0.left, rect0.top, rect0.width, rect0.height, rotInt)
+    }
+
+    fun mergeRectsOnLines(rects: List<Rect>): List<Rect> {
+        // Delegate to shared util to avoid duplication; identical logic
+        return TabScreenUtils.mergeRectsOnLinesNormalized(rects)
+    }
+
+    /**
+     * Reconstructs proper text with word boundaries from individual character TextPositionData.
+     * This is needed because PDFBox extracts characters individually, but we need to identify
+     * word boundaries to properly space the text for TTS.
+     */
+    fun reconstructTextFromCharacters(characters: List<TextPositionData>): String {
+        if (characters.isEmpty()) return ""
+        
+        // Sort characters by position (top to bottom, left to right)
+        val sorted = characters.sortedWith(compareBy({ it.y }, { it.x }))
+        
+        val result = StringBuilder()
+        var lastChar: TextPositionData? = null
+        
+        for (char in sorted) {
+            val charText = char.text.trim()
+            if (charText.isEmpty()) continue
+            
+            if (lastChar != null) {
+                // Calculate distance between characters
+                val horizontalGap = char.x - (lastChar.x + lastChar.width)
+                val verticalGap = abs(char.y - lastChar.y)
+                
+                // Determine if we need to add a space or newline
+                when {
+                    // New line (significant vertical gap)
+                    verticalGap > lastChar.height * 0.5 -> {
+                        if (result.isNotEmpty() && !result.endsWith(" ") && !result.endsWith("\n")) {
+                            result.append(" ")
+                        }
+                    }
+                    // Word boundary (horizontal gap larger than typical character spacing)
+                    horizontalGap > lastChar.width * 0.3 -> {
+                        if (result.isNotEmpty() && !result.endsWith(" ")) {
+                            result.append(" ")
+                        }
+                    }
+                    // Characters are adjacent, no space needed
+                }
+            }
+            
+            result.append(charText)
+            lastChar = char
+        }
+        
+        return result.toString().trim()
+    }
+
+    val textBoundsNormalized = remember(textData, pageImage, pageSizePoints, rotation, pageIndex) {
+        val rotInt = rotationInt
 
         val normalized: List<Pair<Rect, TextPositionData>> = if (pageSizePoints != null) {
             val pdfW = pageSizePoints.width
             val pdfH = pageSizePoints.height
-            textData.mapIndexed { index, t ->
-                val l = (t.x / pdfW)
-                val w = (t.width / pdfW)
-                val h = (t.height / pdfH)
-                val top = ((t.y - t.height) / pdfH)
-                val left = l.coerceAtLeast(0f)
-                val top2 = top.coerceAtLeast(0f)
-                val right = (l + w).coerceAtMost(1f)
-                val bottom = (top + h).coerceAtMost(1f)
-
-                val rect0 = Rect(
-                    left = left,
-                    top = top2,
-                    right = right,
-                    bottom = bottom
-                )
-
-                val rectR = rotateRectNormalized(rect0.left, rect0.top, rect0.width, rect0.height, rotInt)
-
-                rectR to t
+            textData.map { t ->
+                toNormalizedRotatedRect(t, pdfW, pdfH, rotInt) to t
             }
         } else {
             pageImage?.let { image ->
                 val pdfW = image.width.toFloat()
                 val pdfH = image.height.toFloat()
                 textData.map { t ->
-                    val l = (t.x / pdfW)
-                    val w = (t.width / pdfW)
-                    val h = (t.height / pdfH)
-                    val top = ((t.y - t.height) / pdfH)
-                    val leftClamped = l.coerceAtLeast(0f)
-                    val topClamped = top.coerceAtLeast(0f)
-                    val rightClamped = (l + w).coerceAtMost(1f)
-                    val bottomClamped = (top + h).coerceAtMost(1f)
-                    val rect0 = Rect(
-                        left = leftClamped,
-                        top = topClamped,
-                        right = rightClamped,
-                        bottom = bottomClamped
-                    )
-                    val rectR = rotateRectNormalized(rect0.left, rect0.top, rect0.width, rect0.height, rotInt)
-                    rectR to t
+                    toNormalizedRotatedRect(t, pdfW, pdfH, rotInt) to t
                 }
             } ?: emptyList()
         }
         normalized
+    }
+
+    // Helper: map text positions to their normalized rects using the cached mapping
+    fun rectsForPositions(positions: Collection<TextPositionData>): List<Rect> {
+        if (positions.isEmpty()) return emptyList()
+        val posSet = positions.toSet()
+        return textBoundsNormalized.filter { (_, tp) -> posSet.contains(tp) }.map { it.first }
     }
 
     // Use external zoom instead of local state
@@ -302,10 +311,7 @@ fun PdfMid(
             viewportSize.width > 0 && viewportSize.height > 0 &&
             contentBaseSize.width > 0 && contentBaseSize.height > 0) {
 
-            val posSet = searchHighlightPositions.toSet()
-            val matchRects = textBoundsNormalized.filter { (_, tp) ->
-                posSet.contains(tp)
-            }.map { it.first }
+            val matchRects = rectsForPositions(searchHighlightPositions)
 
             if (matchRects.isNotEmpty()) {
                 val minLeft = matchRects.minOf { it.left }
@@ -463,10 +469,7 @@ fun PdfMid(
                                 }
 
                                 if (searchHighlightPositions.isNotEmpty()) {
-                                    val posSet = searchHighlightPositions.toSet()
-                                    val matchRects = textBoundsNormalized.filter { (_, tp) ->
-                                        posSet.contains(tp)
-                                    }.map { it.first }
+                                    val matchRects = rectsForPositions(searchHighlightPositions)
                                     val mergedMatch = mergeRectsOnLines(matchRects)
                                     mergedMatch.forEach { nb ->
                                         drawRoundedRectNorm(
@@ -477,13 +480,7 @@ fun PdfMid(
                                 }
 
                                 if (pageHighlights.isNotEmpty()) {
-                                    val rot = ((rotation % 360f) + 360f) % 360f
-                                    val rotInt = when {
-                                        rot in 45f..135f -> 90
-                                        rot in 135f..225f -> 180
-                                        rot in 225f..315f -> 270
-                                        else -> 0
-                                    }
+                                    val rotInt = rotationInt
                                     pageHighlights.forEach { mark ->
                                         val rotated = mark.rects.map { ur ->
                                             rotateRectNormalized(ur.left, ur.top, ur.width, ur.height, rotInt)
@@ -497,7 +494,13 @@ fun PdfMid(
                                     }
                                 }
 
-                                val toDraw = mergeRectsOnLines(selectedRectsNormalized)
+                                val toDraw = if (selectedRectsNormalized.isNotEmpty()) {
+                                    val rotInt = rotationInt
+                                    val rotated = selectedRectsNormalized.map { ur ->
+                                        rotateRectNormalized(ur.left, ur.top, ur.width, ur.height, rotInt)
+                                    }
+                                    mergeRectsOnLines(rotated)
+                                } else emptyList()
                                 toDraw.forEach { nb ->
                                     drawRoundedRectNorm(
                                         nb,
@@ -564,8 +567,8 @@ fun PdfMid(
                                                                             { (nb, _) -> nb.left }
                                                                         ))
 
-                                                                        selectedRectsNormalized = selectedPairs.map { it.first }
-                                                                        selectedText = selectedPairs.joinToString("") { it.second.text }
+                                                        selectedRectsNormalized = selectedPairs.map { it.first }
+                                                        selectedText = reconstructTextFromCharacters(selectedPairs.map { it.second })
                                                                         if (selectedText.isNotEmpty()) onTextSelected(selectedText)
                                                                     }
                                                                 }
@@ -694,11 +697,21 @@ fun PdfMid(
                         Icon(Icons.AutoMirrored.Filled.ArrowBackIos, "Previous Page", modifier = Modifier.size(20.dp))
                     }
 
-                    JText(
-                        text = "${currentPageIndex + 1}/${totalPages}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = cs.onSurface
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        JText(
+                            text = "${currentPageIndex + 1}/${totalPages}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cs.onSurface
+                        )
+                        if (showLoading) {
+                            Spacer(Modifier.height(2.dp))
+                            LinearProgressIndicator(
+                                modifier = Modifier.width(96.dp).height(3.dp),
+                                color = cs.primary,
+                                trackColor = cs.onSurface.copy(alpha = 0.2f)
+                            )
+                        }
+                    }
 
                     IconButton(
                         onClick = onNextPage,
@@ -757,3 +770,4 @@ fun PdfMid(
         }
     }
 }
+

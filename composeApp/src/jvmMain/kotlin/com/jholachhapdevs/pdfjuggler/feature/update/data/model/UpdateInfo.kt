@@ -1,20 +1,44 @@
 package com.jholachhapdevs.pdfjuggler.feature.update.data.model
 
 import com.jholachhapdevs.pdfjuggler.feature.update.domain.model.UpdateInfo
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-@Serializable   // This annotation makes the class serializable by kotlinx.serialization, allowing it to be converted to and from formats like JSON.
+@Serializable
+data class PlatformDto(
+    val downloadUrl: String,
+    val checksum: String
+)
+
+@Serializable
+data class PlatformsDto(
+    val windows: PlatformDto? = null,
+    val macos: PlatformDto? = null,
+    val linux: PlatformDto? = null
+)
+
+@Serializable
 data class UpdateInfoDto(
-    val latestVersionCode: Double,
+    val latestVersionCode: Int,
     val latestVersionName: String,
-    val downloadMCA1: String,
-    val downloadMCA3: String,
-    val changelog: String
+    val mandatory: Boolean = false,
+    val platforms: PlatformsDto,
+    val changelog: String? = null
 ) {
     fun toDomain(): UpdateInfo {
+        val os = System.getProperty("os.name").lowercase()
+        val platform = when {
+            os.contains("win") -> platforms.windows
+            os.contains("mac") || os.contains("darwin") -> platforms.macos
+            else -> platforms.linux
+        }
         return UpdateInfo(
-            latestVersionName = latestVersionName,
-            downloadMCA3 = downloadMCA3
+            versionCode = latestVersionCode,
+            versionName = latestVersionName,
+            mandatory = mandatory,
+            downloadUrl = platform?.downloadUrl,
+            checksum = platform?.checksum,
+            changelogMarkdown = changelog ?: ""
         )
     }
 }

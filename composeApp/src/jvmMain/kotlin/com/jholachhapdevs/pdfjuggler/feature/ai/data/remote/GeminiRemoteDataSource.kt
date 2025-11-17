@@ -1,7 +1,6 @@
 package com.jholachhapdevs.pdfjuggler.feature.ai.data.remote
 
 import com.jholachhapdevs.pdfjuggler.core.networking.httpClient
-import com.jholachhapdevs.pdfjuggler.core.util.Env
 import com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiContent
 import com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiFile
 import com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiFileData
@@ -16,16 +15,29 @@ import io.ktor.client.request.headers
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.coroutines.delay
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class GeminiRemoteDataSource(
-    private val apiKey: String = Env.GEMINI_API_KEY
+    private val apiKey: String? = null
 ) {
 
     private val baseUrl = "https://generativelanguage.googleapis.com/v1beta"
     private val uploadBaseUrl = "https://generativelanguage.googleapis.com/upload/v1beta"
+    private val json = Json { ignoreUnknownKeys = true }
+
+    private fun jsonString(obj: JsonObject, key: String): String? {
+        val el = obj[key] ?: return null
+        return try { el.jsonPrimitive.content } catch (_: Throwable) { null }
+    }
 
     suspend fun sendChat(
         model: String,
@@ -65,7 +77,7 @@ class GeminiRemoteDataSource(
         mimeType: String,
         bytes: ByteArray
     ): GeminiFile {
-        val initial: UploadFileResponse = httpClient.post("$uploadBaseUrl/files") {
+        val raw = httpClient.post("$uploadBaseUrl/files") {
             parameter("key", apiKey)
             headers {
                 append("X-Goog-Upload-File-Name", fileName)
@@ -73,9 +85,54 @@ class GeminiRemoteDataSource(
             }
             contentType(ContentType.parse(mimeType))
             setBody(bytes)
-        }.body()
+        }.bodyAsText()
 
-        return waitUntilActive(initial.file)
+        val initialFile = try {
+            json.decodeFromString(com.jholachhapdevs.pdfjuggler.feature.ai.data.model.UploadFileResponse.serializer(), raw).file
+        } catch (_: Throwable) {
+            // Lenient parse: handle {"file":{...}}, {"name":...}, or {"error":{...}}
+            val root: JsonElement = try { json.parseToJsonElement(raw) } catch (t: Throwable) {
+                throw Exception("Unexpected upload response (not JSON): $raw", t)
+            }
+            val obj = root as? JsonObject ?: throw Exception("Unexpected upload response (not an object): $raw")
+
+            // Error shape from Google APIs
+            obj["error"]?.let { errEl ->
+                val errObj = errEl as? JsonObject
+                val msg = errObj?.let { jsonString(it, "message") }
+                throw Exception("Gemini upload error: ${msg ?: raw}")
+            }
+
+            // file wrapper
+            obj["file"]?.let { fEl ->
+                val fObj = (fEl as? JsonObject) ?: throw Exception("Unexpected file object: $raw")
+                val name = jsonString(fObj, "name")
+                if (name.isNullOrBlank()) throw Exception("Upload response missing file.name: $raw")
+                return@let com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiFile(
+                    name = name,
+                    uri = jsonString(fObj, "uri"),
+                    mimeType = jsonString(fObj, "mime_type"),
+                    state = jsonString(fObj, "state"),
+                    sizeBytes = jsonString(fObj, "size_bytes")
+                )
+            }
+
+            // direct object with name
+            val topName = jsonString(obj, "name")
+            if (!topName.isNullOrBlank()) {
+                com.jholachhapdevs.pdfjuggler.feature.ai.data.model.GeminiFile(
+                    name = topName,
+                    uri = jsonString(obj, "uri"),
+                    mimeType = jsonString(obj, "mime_type"),
+                    state = jsonString(obj, "state"),
+                    sizeBytes = jsonString(obj, "size_bytes")
+                )
+            } else {
+                throw Exception("Unexpected upload response (no name): $raw")
+            }
+        }
+
+        return waitUntilActive(initialFile)
     }
 
     // Backward compatibility

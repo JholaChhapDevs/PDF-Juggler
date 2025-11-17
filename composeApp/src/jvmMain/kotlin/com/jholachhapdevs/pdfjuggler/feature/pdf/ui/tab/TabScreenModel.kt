@@ -20,6 +20,7 @@ import com.jholachhapdevs.pdfjuggler.feature.ai.data.remote.GeminiRemoteDataSour
 import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.UploadFileUseCase
 import com.jholachhapdevs.pdfjuggler.feature.ai.domain.usecase.GenerateTableOfContentsUseCase
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.apache.pdfbox.pdmodel.PDDocument
@@ -45,7 +46,7 @@ class TabScreenModel(
     private val bookmarkManager = BookmarkManager(pdfFile)
     private val highlightManager = HighlightManager()
     private val renderManager = PdfRenderManager(pdfFile.path)
-    private val pageManager = PageManager { updateThumbnailOrder() }
+    private val pageManager = PageManager()
     private val saveManager = SaveManager(pdfFile, bookmarkManager, highlightManager)
     
     // Search manager - initialized after core state is set up
@@ -112,7 +113,9 @@ class TabScreenModel(
     val currentRotation: Float get() = renderManager.getRotationAngle()
     val isSaving: Boolean get() = saveManager.isCurrentlySaving()
     val saveResult: SaveResult? get() = saveManager.getCurrentSaveResult()
-    
+    val pageImages get() = renderManager.pageImages
+    val progressiveThumbnails get() = renderManager.thumbnailsList
+
     init {
         initializeSearchManager()
         loadPdf()
@@ -133,39 +136,56 @@ class TabScreenModel(
             isLoading = true
             try {
                 totalPages = getTotalPages(pdfFile.path)
-                // Initialize page order with original sequence
                 pageManager.initializePageOrder(totalPages)
-                
-                // Load thumbnails and current page image
-                val thumbnailsList = renderManager.renderThumbnails(totalPages)
-                renderManager.initializeThumbnails(thumbnailsList)
+                // Ensure render manager's thumbnails align with the initialized page order
+                screenModelScope.launch { updateThumbnailOrder() }
+
+                // Start progressive rendering of all pages and thumbnails
+                screenModelScope.launch {
+                    renderManager.renderAllPagesProgressively(totalPages)
+                }
+
+                // Render and display the first page immediately
                 val currentImage = renderManager.renderPageHighQuality(0)
                 renderManager.updateCurrentPageImage(currentImage)
-                
-                // Load text data
-                allTextDataWithCoordinates = extractAllTextData(pdfFile.path)
-                allTextData = getTextOnlyData()
-                
-                // Load bookmarks from PDF metadata
-                val loadedBookmarks = bookmarkManager.loadBookmarksFromMetadata()
-                bookmarkManager.initializeBookmarks(loadedBookmarks)
-                
-                // Extract page sizes in points for proper coordinate mapping
-                pageSizesPoints = extractPageSizesPoints(pdfFile.path)
+                isLoading = false // UI is now ready, show first page
 
-                // Clear previous search (if any) and recompute based on current query
-                if (searchManager.searchQuery.isNotBlank()) {
-                    searchManager.recomputeSearchMatches()
-                } else {
-                    searchManager.clearSearch()
+                // Render thumbnails for the left pane progressively (faster, lower DPI)
+                screenModelScope.launch {
+                    renderManager.renderThumbnailsProgressively(totalPages)
                 }
-                
-                // Start async TOC loading after PDF is loaded and displayed
+
+                // Load text data in the background
+                screenModelScope.launch {
+                    allTextDataWithCoordinates = extractAllTextData(pdfFile.path)
+                    allTextData = getTextOnlyData()
+                }
+
+                // Load bookmarks in the background
+                screenModelScope.launch {
+                    val loadedBookmarks = bookmarkManager.loadBookmarksFromMetadata()
+                    bookmarkManager.initializeBookmarks(loadedBookmarks)
+                }
+
+                // Extract page sizes in the background
+                screenModelScope.launch {
+                    pageSizesPoints = extractPageSizesPoints(pdfFile.path)
+                }
+
+                // Search logic in the background
+                screenModelScope.launch {
+                    if (searchManager.searchQuery.isNotBlank()) {
+                        searchManager.recomputeSearchMatches()
+                    } else {
+                        searchManager.clearSearch()
+                    }
+                }
+
+                // Load TOC in the background
                 loadTableOfContentsAsync()
 
             } catch (e: Exception) {
                 e.printStackTrace()
-            } finally {
                 isLoading = false
             }
         }
@@ -286,10 +306,31 @@ class TabScreenModel(
         return highlightManager.getHighlightsForDisplayedPage(original)
     }
 
+    fun undoLastHighlightForDisplayedPage() {
+        val original = getOriginalPageIndex(selectedPageIndex)
+        highlightManager.undoLastHighlightForPage(original)
+    }
+
+    fun redoLastHighlightForDisplayedPage() {
+        val original = getOriginalPageIndex(selectedPageIndex)
+        highlightManager.redoLastHighlightForPage(original)
+    }
+
+    fun canUndoHighlightForDisplayedPage(): Boolean {
+        val original = getOriginalPageIndex(selectedPageIndex)
+        return highlightManager.canUndoForPage(original)
+    }
+
+    fun canRedoHighlightForDisplayedPage(): Boolean {
+        val original = getOriginalPageIndex(selectedPageIndex)
+        return highlightManager.canRedoForPage(original)
+    }
+
     // ============ Rendering Methods ============
     fun zoomIn() {
         screenModelScope.launch {
-            renderManager.zoomIn { newImage ->
+            val originalIndex = getOriginalPageIndex(selectedPageIndex)
+            renderManager.zoomIn(originalIndex) { newImage ->
                 renderManager.updateCurrentPageImage(newImage)
             }
         }
@@ -297,7 +338,8 @@ class TabScreenModel(
 
     fun zoomOut() {
         screenModelScope.launch {
-            renderManager.zoomOut { newImage ->
+            val originalIndex = getOriginalPageIndex(selectedPageIndex)
+            renderManager.zoomOut(originalIndex) { newImage ->
                 renderManager.updateCurrentPageImage(newImage)
             }
         }
@@ -305,7 +347,8 @@ class TabScreenModel(
 
     fun resetZoom() {
         screenModelScope.launch {
-            renderManager.resetZoom { newImage ->
+            val originalIndex = getOriginalPageIndex(selectedPageIndex)
+            renderManager.resetZoom(originalIndex) { newImage ->
                 renderManager.updateCurrentPageImage(newImage)
             }
         }
@@ -420,6 +463,24 @@ class TabScreenModel(
                 pageManager.markPageChangesSaved()
             }
         }
+    }
+
+    // ============ Revert Methods for Action Bar Dismiss ============
+    fun revertUnsavedBookmarks() {
+        bookmarkManager.revertUnsavedBookmarks()
+    }
+    fun revertUnsavedHighlights() {
+        highlightManager.revertUnsavedHighlights()
+    }
+    fun revertUnsavedPageOrder() {
+        screenModelScope.launch {
+            pageManager.resetPageOrder(totalPages)
+        }
+    }
+    fun revertAllUnsavedChanges() {
+        if (hasUnsavedBookmarks) revertUnsavedBookmarks()
+        if (hasUnsavedHighlights) revertUnsavedHighlights()
+        if (hasPageChanges) revertUnsavedPageOrder()
     }
     
     fun clearSaveResult() = saveManager.clearSaveResult()
