@@ -19,8 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JButton
 import com.jholachhapdevs.pdfjuggler.core.ui.components.noRippleClickable
-import com.jholachhapdevs.pdfjuggler.feature.update.data.repository.UpdateRepository
-import com.jholachhapdevs.pdfjuggler.feature.update.domain.usecase.GetUpdatesUseCase
 import com.mikepenz.markdown.m3.Markdown
 
 // --------------------------------------------------------------------
@@ -33,7 +31,7 @@ fun UpdateFloatingChip(
     currentVersionCode: Int,
     screenModel: UpdateScreenModel
 ) {
-    val state = screenModel.uiState
+    // state isn't needed at the floating chip level; details are handled in the expanded banner
     val cs = MaterialTheme.colorScheme
 
     var expanded by remember { mutableStateOf(false) }
@@ -122,7 +120,17 @@ fun UpdateHomeBanner(
             }
         }
 
-        Text("Latest: ${info.versionName}", style = MaterialTheme.typography.bodySmall)
+        Text("Latest: ${'$'}{info.versionName}", style = MaterialTheme.typography.bodySmall)
+
+        // Show any user-visible error (checksum mismatch or download error)
+        state.error?.let { err ->
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = err,
+                style = MaterialTheme.typography.bodySmall,
+                color = cs.error
+            )
+        }
 
         if (state.isDownloading) {
             DownloadProgressSection(state)
@@ -152,7 +160,7 @@ fun UpdateHomeBanner(
             if (state.downloadedPath == null && downloadUrl != null) {
                 JButton(onClick = {
                     if (!state.isDownloading)
-                        screenModel.downloadUpdate(downloadUrl)
+                        screenModel.downloadUpdate(downloadUrl, expectedChecksum = info.checksum)
                 }) {
                     Text(if (state.isDownloading) "Downloading" else "Download")
                 }

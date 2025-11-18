@@ -3,7 +3,6 @@ package com.jholachhapdevs.pdfjuggler.feature.update.ui
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import com.jholachhapdevs.pdfjuggler.feature.update.domain.usecase.GetUpdatesUseCase
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
@@ -41,7 +40,12 @@ class UpdateScreenModel(
         uiState = uiState.copy(showChangelog = show)
     }
 
-    fun downloadUpdate(url: String, fileNameHint: String? = null) {
+    /**
+     * Download an update from [url].
+     * If [expectedChecksum] is provided it will be used to verify the downloaded file;
+     * otherwise the checksum from the currently loaded `uiState.updateInfo` is used (if any).
+     */
+    fun downloadUpdate(url: String, fileNameHint: String? = null, expectedChecksum: String? = null) {
         if (uiState.isDownloading) return
         screenModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -52,7 +56,8 @@ class UpdateScreenModel(
                         downloadedPath = null,
                         downloadedBytes = 0,
                         totalBytes = null,
-                        downloadStartedAtMillis = System.currentTimeMillis()
+                        downloadStartedAtMillis = System.currentTimeMillis(),
+                        error = null
                     )
                 }
                 val targetName = fileNameHint ?: url.substringAfterLast('/')
@@ -87,8 +92,47 @@ class UpdateScreenModel(
                         }
                     }
                 }
-                withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    uiState = uiState.copy(isDownloading = false, downloadedPath = outFile.absolutePath, downloadProgress = 1f, downloadedBytes = uiState.totalBytes ?: uiState.downloadedBytes)
+
+                // After download completes, verify checksum if available
+                val expectedChecksumRaw = expectedChecksum ?: uiState.updateInfo?.checksum
+
+                var verificationError: String? = null
+                if (!expectedChecksumRaw.isNullOrBlank()) {
+                    try {
+                        val (algorithm, expectedHash) = parseChecksum(expectedChecksumRaw)
+
+                        val digestBytes = computeFileDigest(outFile, algorithm)
+                        val actualHex = toHex(digestBytes)
+                        val actualBase64 = java.util.Base64.getEncoder().encodeToString(digestBytes)
+
+                        val expectedIsHex = expectedHash.matches(Regex("^[0-9a-fA-F]+$"))
+                        val match = if (expectedIsHex) {
+                            actualHex.equals(expectedHash, ignoreCase = true)
+                        } else {
+                            actualBase64 == expectedHash
+                        }
+
+                        if (!match) {
+                            verificationError = "Checksum mismatch: expected=$expectedHash, actual(hex)=$actualHex"
+                        } else {
+                            // verification succeeded; nothing to do
+                        }
+                    } catch (e: Exception) {
+                        val exMsg = e.message ?: e.toString()
+                        verificationError = "Checksum verification failed: $exMsg"
+                    }
+                }
+
+                if (verificationError == null) {
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        uiState = uiState.copy(isDownloading = false, downloadedPath = outFile.absolutePath, downloadProgress = 1f, downloadedBytes = uiState.totalBytes ?: uiState.downloadedBytes)
+                    }
+                } else {
+                    // delete the bad file
+                    try { outFile.delete() } catch (_: Throwable) {}
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        uiState = uiState.copy(isDownloading = false, downloadedPath = null, error = verificationError)
+                    }
                 }
             } catch (t: Throwable) {
                 withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -96,5 +140,39 @@ class UpdateScreenModel(
                 }
             }
         }
+    }
+
+    // Helpers for checksum parsing and computation
+    private fun parseChecksum(raw: String): Pair<String, String> {
+        val lower = raw.trim()
+        return if (lower.contains('-')) {
+            val alg = lower.substringBefore('-').lowercase()
+            val hash = lower.substringAfter('-')
+            val jAlg = when (alg) {
+                "sha256" -> "SHA-256"
+                "sha1" -> "SHA-1"
+                "md5" -> "MD5"
+                else -> alg.uppercase()
+            }
+            Pair(jAlg, hash)
+        } else {
+            Pair("SHA-256", lower)
+        }
+    }
+
+    private fun computeFileDigest(file: java.io.File, algorithm: String): ByteArray {
+        val md = java.security.MessageDigest.getInstance(algorithm)
+        file.inputStream().use { fis ->
+            val buffer = ByteArray(8192)
+            var read: Int
+            while (fis.read(buffer).also { read = it } > 0) {
+                md.update(buffer, 0, read)
+            }
+        }
+        return md.digest()
+    }
+
+    private fun toHex(bytes: ByteArray): String = buildString {
+        for (b in bytes) append(String.format("%02x", b))
     }
 }
