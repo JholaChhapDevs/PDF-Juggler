@@ -6,6 +6,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import com.jholachhapdevs.pdfjuggler.core.util.LocalComposeWindow
+import androidx.compose.ui.res.painterResource
 
 fun main() = application {
 
@@ -15,7 +16,8 @@ fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
         title = "PDF-Juggler",
-        state = windowState
+        state = windowState,
+        icon = painterResource("icons/app_icon.png")
     ) {
         val window = this.window
         CompositionLocalProvider(LocalComposeWindow provides window) {

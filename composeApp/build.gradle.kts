@@ -10,7 +10,7 @@ plugins {
 
 kotlin {
     jvm()
-    
+
     sourceSets {
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -31,15 +31,15 @@ kotlin {
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
-            
+
             // MaryTTS dependencies
             implementation("de.dfki.mary:marytts:5.2.1")
             implementation("de.dfki.mary:voice-cmu-slt-hsmm:5.2.1")
-            
+
             // Missing annotation dependencies needed by ProGuard
             implementation("javax.annotation:javax.annotation-api:1.3.2")
             implementation("com.google.code.findbugs:jsr305:3.0.2")
-            
+
             // Optional dependencies for better compatibility
             implementation("org.apache.commons:commons-lang3:3.12.0")
         }
@@ -63,13 +63,22 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "PDF-Juggler"
             packageVersion = "1.0.0"
-            
+
             windows {
+                iconFile.set(project.file("src/jvmMain/resources/icons/app_icon.ico"))
                 menuGroup = "PDF Juggler"
                 shortcut = true
                 menu = true
             }
-            
+
+            macOS {
+                iconFile.set(project.file("src/jvmMain/resources/icons/app_icon.icns"))
+            }
+
+            linux {
+                iconFile.set(project.file("src/jvmMain/resources/icons/app_icon.png"))
+            }
+
             // Include additional JVM modules
             modules("java.sql", "java.management", "java.logging", "java.desktop")
         }
