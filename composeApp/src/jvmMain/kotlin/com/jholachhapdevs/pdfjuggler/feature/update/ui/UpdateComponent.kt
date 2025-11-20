@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import com.jholachhapdevs.pdfjuggler.core.ui.components.JButton
 import com.jholachhapdevs.pdfjuggler.core.ui.components.noRippleClickable
 import com.mikepenz.markdown.m3.Markdown
@@ -36,6 +38,8 @@ fun UpdateFloatingChip(
 
     var expanded by remember { mutableStateOf(false) }
 
+    val pointerIconModifier = if (!expanded) Modifier.pointerHoverIcon(PointerIcon.Hand) else Modifier
+
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = cs.surface,
@@ -43,6 +47,7 @@ fun UpdateFloatingChip(
         tonalElevation = 0.dp,
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
+            .then(pointerIconModifier)
             .animateContentSize(
                 animationSpec = spring(
                     stiffness = 500f,
@@ -120,7 +125,7 @@ fun UpdateHomeBanner(
             }
         }
 
-        Text("Latest: ${'$'}{info.versionName}", style = MaterialTheme.typography.bodySmall)
+        Text("Latest: ${info.versionName}", style = MaterialTheme.typography.bodySmall)
 
         // Show any user-visible error (checksum mismatch or download error)
         state.error?.let { err ->
