@@ -1,4 +1,7 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
+import org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask
+
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -84,3 +87,4 @@ compose.desktop {
         }
     }
 }
+
