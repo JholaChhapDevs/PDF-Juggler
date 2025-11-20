@@ -1,16 +1,17 @@
 package com.jholachhapdevs.pdfjuggler.feature.update.ui
 
-import cafe.adriel.voyager.core.model.ScreenModel
-import cafe.adriel.voyager.core.model.screenModelScope
-import com.jholachhapdevs.pdfjuggler.feature.update.domain.usecase.GetUpdatesUseCase
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import io.ktor.client.request.get
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.utils.io.readAvailable
+import cafe.adriel.voyager.core.model.ScreenModel
+import cafe.adriel.voyager.core.model.screenModelScope
+import com.jholachhapdevs.pdfjuggler.feature.update.domain.usecase.GetUpdatesUseCase
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.utils.io.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class UpdateScreenModel(
     private val getUpdatesUseCase: GetUpdatesUseCase
@@ -60,78 +61,102 @@ class UpdateScreenModel(
                         error = null
                     )
                 }
-                val targetName = fileNameHint ?: url.substringAfterLast('/')
-                val tempBase = java.io.File(System.getProperty("java.io.tmpdir"), "pdfjuggler-updates")
-                if (!tempBase.exists()) tempBase.mkdirs()
-                val outFile = java.io.File(tempBase, targetName.ifBlank { "update.bin" })
-                try { outFile.deleteOnExit() } catch (_: Throwable) {}
+
+                val targetName = (fileNameHint ?: url.substringAfterLast('/')).ifBlank { "update.bin" }
+                val downloadsDir = java.io.File(System.getProperty("user.home"), "Downloads")
+                val baseDir = if (downloadsDir.exists() && downloadsDir.isDirectory) {
+                    java.io.File(downloadsDir, "pdfjuggler-updates")
+                } else {
+                    java.io.File(System.getProperty("java.io.tmpdir"), "pdfjuggler-updates")
+                }
+                val pdfFolder = java.io.File(baseDir, "PDF-Juggler").apply { mkdirs() }
+
+                // Clean previous files
+                pdfFolder.listFiles()?.forEach { f ->
+                    runCatching { f.deleteRecursively() }
+                }
+
+                val finalFile = java.io.File(pdfFolder, targetName)
+                val tempFile = java.io.File(pdfFolder, "$targetName.part")
 
                 val client = com.jholachhapdevs.pdfjuggler.core.networking.httpClient
                 val response = client.get(url)
-                val total: Long? = response.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull()
+                if (!response.status.isSuccess()) {
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        uiState = uiState.copy(isDownloading = false, error = "HTTP ${response.status.value}")
+                    }
+                    return@launch
+                }
+
+                val total = response.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull()
                 withContext(kotlinx.coroutines.Dispatchers.Main) {
                     uiState = uiState.copy(totalBytes = total)
                 }
+
                 val channel = response.bodyAsChannel()
-                java.io.FileOutputStream(outFile).use { fos ->
-                    var downloaded = 0L
+                var downloaded = 0L
+                java.io.FileOutputStream(tempFile).use { fos ->
                     val buffer = ByteArray(8192)
                     var lastUi = 0L
                     while (!channel.isClosedForRead) {
+                        if (!kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]!!.isActive) break
                         val n = channel.readAvailable(buffer, 0, buffer.size)
                         if (n <= 0) break
                         fos.write(buffer, 0, n)
                         downloaded += n
                         val now = System.currentTimeMillis()
                         if (now - lastUi >= 100L) {
-                            val p = if (total != null && total > 0) (downloaded.toDouble() / total.toDouble()).toFloat() else null
+                            val p = if (total != null && total > 0) (downloaded.toDouble() / total).toFloat() else null
                             withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                uiState = uiState.copy(downloadProgress = p, downloadedBytes = downloaded, totalBytes = total)
+                                uiState = uiState.copy(downloadProgress = p, downloadedBytes = downloaded)
                             }
                             lastUi = now
                         }
                     }
                 }
 
-                // After download completes, verify checksum if available
+                // Checksum
                 val expectedChecksumRaw = expectedChecksum ?: uiState.updateInfo?.checksum
-
                 var verificationError: String? = null
                 if (!expectedChecksumRaw.isNullOrBlank()) {
                     try {
                         val (algorithm, expectedHash) = parseChecksum(expectedChecksumRaw)
-
-                        val digestBytes = computeFileDigest(outFile, algorithm)
-                        val actualHex = toHex(digestBytes)
-                        val actualBase64 = java.util.Base64.getEncoder().encodeToString(digestBytes)
-
-                        val expectedIsHex = expectedHash.matches(Regex("^[0-9a-fA-F]+$"))
-                        val match = if (expectedIsHex) {
-                            actualHex.equals(expectedHash, ignoreCase = true)
+                        val allowed = setOf("SHA-256", "SHA-1", "MD5")
+                        if (algorithm !in allowed) {
+                            verificationError = "Unsupported checksum algorithm: $algorithm"
                         } else {
-                            actualBase64 == expectedHash
-                        }
-
-                        if (!match) {
-                            verificationError = "Checksum mismatch: expected=$expectedHash, actual(hex)=$actualHex"
-                        } else {
-                            // verification succeeded; nothing to do
+                            val digestBytes = computeFileDigest(tempFile, algorithm)
+                            val actualHex = toHex(digestBytes)
+                            val actualBase64 = java.util.Base64.getEncoder().encodeToString(digestBytes)
+                            val expectedIsHex = expectedHash.matches(Regex("^[0-9a-fA-F]+$"))
+                            val match = if (expectedIsHex) {
+                                actualHex.equals(expectedHash, ignoreCase = true)
+                            } else {
+                                actualBase64 == expectedHash
+                            }
+                            if (!match) {
+                                verificationError = "Checksum mismatch"
+                            }
                         }
                     } catch (e: Exception) {
-                        val exMsg = e.message ?: e.toString()
-                        verificationError = "Checksum verification failed: $exMsg"
+                        verificationError = "Checksum failed: ${e.message}"
                     }
                 }
 
                 if (verificationError == null) {
+                    tempFile.renameTo(finalFile)
                     withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        uiState = uiState.copy(isDownloading = false, downloadedPath = outFile.absolutePath, downloadProgress = 1f, downloadedBytes = uiState.totalBytes ?: uiState.downloadedBytes)
+                        uiState = uiState.copy(
+                            isDownloading = false,
+                            downloadedPath = finalFile.absolutePath,
+                            downloadProgress = 1f,
+                            downloadedBytes = downloaded
+                        )
                     }
                 } else {
-                    // delete the bad file
-                    try { outFile.delete() } catch (_: Throwable) {}
+                    runCatching { tempFile.delete() }
                     withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        uiState = uiState.copy(isDownloading = false, downloadedPath = null, error = verificationError)
+                        uiState = uiState.copy(isDownloading = false, error = verificationError)
                     }
                 }
             } catch (t: Throwable) {
@@ -141,38 +166,38 @@ class UpdateScreenModel(
             }
         }
     }
+}
 
-    // Helpers for checksum parsing and computation
-    private fun parseChecksum(raw: String): Pair<String, String> {
-        val lower = raw.trim()
-        return if (lower.contains('-')) {
-            val alg = lower.substringBefore('-').lowercase()
-            val hash = lower.substringAfter('-')
-            val jAlg = when (alg) {
-                "sha256" -> "SHA-256"
-                "sha1" -> "SHA-1"
-                "md5" -> "MD5"
-                else -> alg.uppercase()
-            }
-            Pair(jAlg, hash)
-        } else {
-            Pair("SHA-256", lower)
+// Helpers for checksum parsing and computation
+private fun parseChecksum(raw: String): Pair<String, String> {
+    val lower = raw.trim()
+    return if (lower.contains('-')) {
+        val alg = lower.substringBefore('-').lowercase()
+        val hash = lower.substringAfter('-')
+        val jAlg = when (alg) {
+            "sha256" -> "SHA-256"
+            "sha1" -> "SHA-1"
+            "md5" -> "MD5"
+            else -> alg.uppercase()
+        }
+        Pair(jAlg, hash)
+    } else {
+        Pair("SHA-256", lower)
+    }
+}
+
+private fun computeFileDigest(file: java.io.File, algorithm: String): ByteArray {
+    val md = java.security.MessageDigest.getInstance(algorithm)
+    file.inputStream().use { fis ->
+        val buffer = ByteArray(8192)
+        var read: Int
+        while (fis.read(buffer).also { read = it } > 0) {
+            md.update(buffer, 0, read)
         }
     }
+    return md.digest()
+}
 
-    private fun computeFileDigest(file: java.io.File, algorithm: String): ByteArray {
-        val md = java.security.MessageDigest.getInstance(algorithm)
-        file.inputStream().use { fis ->
-            val buffer = ByteArray(8192)
-            var read: Int
-            while (fis.read(buffer).also { read = it } > 0) {
-                md.update(buffer, 0, read)
-            }
-        }
-        return md.digest()
-    }
-
-    private fun toHex(bytes: ByteArray): String = buildString {
-        for (b in bytes) append(String.format("%02x", b))
-    }
+private fun toHex(bytes: ByteArray): String = buildString {
+    for (b in bytes) append(String.format("%02x", b))
 }

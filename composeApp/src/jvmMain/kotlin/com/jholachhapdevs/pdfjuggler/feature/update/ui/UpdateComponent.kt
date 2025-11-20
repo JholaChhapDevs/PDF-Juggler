@@ -221,13 +221,14 @@ private fun DownloadProgressSection(state: UpdateUiState) {
     val percent = if (t != null && t > 0) (d.toDouble() / t.toDouble()) * 100 else null
 
     Text(
-        buildString {
-            append(formatBytes(d))
-            if (t != null) append(" / ").append(formatBytes(t))
-            append(" • ").append(formatSpeed(speed))
-            percent?.let { append(" • ").append(String.format("%.0f%%", it)) }
-            eta?.let { append(" • ").append(formatEta(it)) }
-        },
+//        buildString {
+//            append(formatBytes(d))
+//            if (t != null) append(" / ").append(formatBytes(t))
+//            append(" • ").append(formatSpeed(speed))
+//            percent?.let { append(" • ").append(String.format("%.0f%%", it)) }
+//            eta?.let { append(" • ").append(formatEta(it)) }
+//        },
+        text = "Downloading...",
         style = MaterialTheme.typography.bodySmall
     )
 }
