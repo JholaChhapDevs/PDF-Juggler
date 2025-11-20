@@ -64,13 +64,9 @@
    ```
 
 2. **Configure Environment Variables** (Required for AI features)
-   - Copy `sample_Env.kt` to `Env.kt` in the same directory:
-     ```shell
-     copy "composeApp\src\jvmMain\kotlin\com\jholachhapdevs\pdfjuggler\core\util\sample_Env.kt" "composeApp\src\jvmMain\kotlin\com\jholachhapdevs\pdfjuggler\core\util\Env.kt"
-     ```
    - Edit the `Env.kt` file and replace placeholder values:
      - `GEMINI_API_KEY`: Your Google Gemini API key for AI features
-       - Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+       - Get your API key from [Google AI Studio](https://aistudio.google.com/app/u/2/api-keys)
        - Create a new project and enable the Gemini API
      - `PREFS_KEY`: A custom encryption key for preferences (16+ characters)
    
